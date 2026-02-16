@@ -21,7 +21,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     ])
     .split(area);
 
-    draw_title_bar(frame, vertical[0]);
+    draw_title_bar(frame, vertical[0], app);
 
     // Middle: device list (20%) | content (80%)
     let middle = Layout::horizontal([
@@ -30,7 +30,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     ])
     .split(vertical[1]);
 
-    device_list::draw(frame, middle[0], matches!(app.focus, FocusPanel::DeviceList));
+    device_list::draw(frame, middle[0], app);
     draw_content_area(frame, middle[1], matches!(app.focus, FocusPanel::Content));
     draw_command_bar(frame, vertical[2]);
 
@@ -39,7 +39,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     }
 }
 
-fn draw_title_bar(frame: &mut Frame, area: Rect) {
+fn draw_title_bar(frame: &mut Frame, area: Rect, app: &App) {
     let columns = Layout::horizontal([
         Constraint::Percentage(50),
         Constraint::Percentage(50),
@@ -53,11 +53,26 @@ fn draw_title_bar(frame: &mut Frame, area: Rect) {
             .add_modifier(Modifier::BOLD),
     )]));
 
-    let device = Paragraph::new(Line::from(vec![Span::styled(
-        "device: <none>",
-        Style::default().fg(Color::DarkGray),
-    )]))
-    .right_aligned();
+    let device_span = if let Some(device) = app.active_device() {
+        let color = match device.state {
+            crate::adb::device::DeviceState::Online => Color::Green,
+            _ => Color::Yellow,
+        };
+        Line::from(vec![
+            Span::styled("device: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                format!("{} ({})", device.display_name(), device.serial),
+                Style::default().fg(color),
+            ),
+        ])
+    } else {
+        Line::from(vec![Span::styled(
+            "device: <none>",
+            Style::default().fg(Color::DarkGray),
+        )])
+    };
+
+    let device = Paragraph::new(device_span).right_aligned();
 
     frame.render_widget(title, columns[0]);
     frame.render_widget(device, columns[1]);
@@ -84,7 +99,8 @@ fn draw_command_bar(frame: &mut Frame, area: Rect) {
     let hints = vec![
         ("q", "Quit"),
         ("Tab", "Focus"),
-        ("Esc", "Close"),
+        ("j/k", "Select"),
+        ("Enter", "Activate"),
     ];
     let mut spans = Vec::new();
     for (i, (key, desc)) in hints.iter().enumerate() {
@@ -121,6 +137,9 @@ Keybindings
 ───────────
 q         Quit
 Tab       Cycle focus
+j / ↓     Select next device
+k / ↑     Select previous device
+Enter     Activate selected device
 ?         Toggle help
 Esc       Close modal";
 
