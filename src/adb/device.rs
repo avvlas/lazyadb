@@ -26,7 +26,7 @@ pub enum ConnectionType {
     Emulator,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Device {
     pub serial: String,
     pub state: DeviceState,

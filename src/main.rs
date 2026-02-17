@@ -3,18 +3,17 @@ mod adb;
 mod app;
 mod component;
 mod config;
-mod event;
-mod keys;
 mod logging;
+mod tui;
 
 use color_eyre::Result;
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     color_eyre::install()?;
     logging::init()?;
-
-    let mut terminal = ratatui::init();
-    let result = app::App::new()?.run(&mut terminal);
-    ratatui::restore();
-    result
+    let mut tui = tui::Tui::new()?;
+    let mut app = app::App::new()?;
+    app.run(&mut tui).await?;
+    Ok(())
 }

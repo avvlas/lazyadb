@@ -1,153 +1,126 @@
-pub mod device_list;
-pub mod emulator_list;
-
+use crossterm::event::{KeyEvent, MouseEvent};
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph},
+    layout::{Rect, Size},
 };
+use tokio::sync::mpsc::UnboundedSender;
 
-use crate::app::{App, FocusPanel};
+use crate::{action::Action, config::Config, tui::Event};
 
-pub fn draw(frame: &mut Frame, app: &App) {
-    let area = frame.area();
+pub mod content_area;
+pub mod device_list;
+pub mod emulator_list;
+pub mod help_modal;
 
-    // Vertical: title bar | middle | command bar
-    let vertical = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Min(3),
-        Constraint::Length(1),
-    ])
-    .split(area);
-
-    draw_title_bar(frame, vertical[0]);
-
-    // Middle: sidebar (20%) | content (80%)
-    let middle = Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
-        .split(vertical[1]);
-
-    // Sidebar: devices (top 50%) | emulators (bottom 50%)
-    let sidebar =
-        Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).split(middle[0]);
-
-    device_list::draw(frame, sidebar[0], app);
-    emulator_list::draw(frame, sidebar[1], app);
-    draw_content_area(frame, middle[1], matches!(app.focus, FocusPanel::Content));
-    draw_command_bar(frame, vertical[2], app);
-
-    if app.show_help {
-        draw_help_overlay(frame, area);
+/// `Component` is a trait that represents a visual and interactive element of the user interface.
+///
+/// Implementors of this trait can be registered with the main application loop and will be able to
+/// receive events, update state, and be rendered on the screen.
+pub trait Component {
+    /// Register an action handler that can send actions for processing if necessary.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - An unbounded sender that can send actions.
+    ///
+    /// # Returns
+    ///
+    /// * [`color_eyre::Result<()>`] - An Ok result or an error.
+    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> color_eyre::Result<()> {
+        let _ = tx; // to appease clippy
+        Ok(())
     }
-}
-
-fn draw_title_bar(frame: &mut Frame, area: Rect) {
-    let columns =
-        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area);
-
-    let title = Paragraph::new(Line::from(vec![Span::styled(
-        "LazyADB v0.1.0",
-        Style::default()
-            .fg(Color::Green)
-            .add_modifier(Modifier::BOLD),
-    )]));
-
-    let device_span = Line::from(vec![Span::styled(
-        "device: <none>",
-        Style::default().fg(Color::DarkGray),
-    )]);
-
-    let device = Paragraph::new(device_span).right_aligned();
-
-    frame.render_widget(title, columns[0]);
-    frame.render_widget(device, columns[1]);
-}
-
-fn draw_content_area(frame: &mut Frame, area: Rect, focused: bool) {
-    let border_color = if focused {
-        Color::Green
-    } else {
-        Color::DarkGray
-    };
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(" CONTENT ")
-        .border_style(Style::default().fg(border_color));
-    let paragraph = Paragraph::new("Select a device to begin").block(block);
-    frame.render_widget(paragraph, area);
-}
-
-fn draw_command_bar(frame: &mut Frame, area: Rect, app: &App) {
-    let columns = Layout::horizontal([Constraint::Min(0), Constraint::Length(8)]).split(area);
-
-    // Left: keymap hints
-    let mut hints = vec![("q", "Quit"), ("Tab", "Focus"), ("j/k", "Select")];
-    if matches!(app.focus, FocusPanel::Emulators) {
-        hints.push(("Enter", "Start"));
-        hints.push(("x", "Kill"));
+    /// Register a configuration handler that provides configuration settings if necessary.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Configuration settings.
+    ///
+    /// # Returns
+    ///
+    /// * [`color_eyre::Result<()>`] - An Ok result or an error.
+    fn register_config_handler(&mut self, config: Config) -> color_eyre::Result<()> {
+        let _ = config; // to appease clippy
+        Ok(())
     }
-    let mut spans = Vec::new();
-    for (i, (key, desc)) in hints.iter().enumerate() {
-        if i > 0 {
-            spans.push(Span::raw("  "));
-        }
-        spans.push(Span::styled(
-            format!(" {} ", key),
-            Style::default().fg(Color::DarkGray),
-        ));
-        spans.push(Span::styled(
-            format!(" {}", desc),
-            Style::default().fg(Color::White),
-        ));
+    /// Initialize the component with a specified area if necessary.
+    ///
+    /// # Arguments
+    ///
+    /// * `area` - Rectangular area to initialize the component within.
+    ///
+    /// # Returns
+    ///
+    /// * [`color_eyre::Result<()>`] - An Ok result or an error.
+    fn init(&mut self, area: Size) -> color_eyre::Result<()> {
+        let _ = area; // to appease clippy
+        Ok(())
     }
-    let left = Paragraph::new(Line::from(spans));
-    frame.render_widget(left, columns[0]);
-
-    // Right: help hint
-    let right = Paragraph::new(Line::from(vec![Span::styled(
-        "? help",
-        Style::default().fg(Color::DarkGray),
-    )]))
-    .right_aligned();
-    frame.render_widget(right, columns[1]);
-}
-
-fn draw_help_overlay(frame: &mut Frame, area: Rect) {
-    let rect = centered_rect(50, 50, area);
-    frame.render_widget(Clear, rect);
-
-    let help_text = "\
-Keybindings
-───────────
-q         Quit
-Tab       Cycle focus (Devices → Emulators → Content)
-j / ↓     Select next item
-k / ↑     Select previous item
-x         Kill running emulator (Emulators panel)
-?         Toggle help
-Esc       Close modal";
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(" HELP ")
-        .border_style(Style::default().fg(Color::Green));
-    let paragraph = Paragraph::new(help_text).block(block);
-    frame.render_widget(paragraph, rect);
-}
-
-fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
-    let vertical = Layout::vertical([
-        Constraint::Percentage((100 - percent_y) / 2),
-        Constraint::Percentage(percent_y),
-        Constraint::Percentage((100 - percent_y) / 2),
-    ])
-    .split(area);
-
-    Layout::horizontal([
-        Constraint::Percentage((100 - percent_x) / 2),
-        Constraint::Percentage(percent_x),
-        Constraint::Percentage((100 - percent_x) / 2),
-    ])
-    .split(vertical[1])[1]
+    /// Handle incoming events and produce actions if necessary.
+    ///
+    /// # Arguments
+    ///
+    /// * `event` - An optional event to be processed.
+    ///
+    /// # Returns
+    ///
+    /// * [`color_eyre::Result<Option<Action>>`] - An action to be processed or none.
+    fn handle_events(&mut self, event: Option<Event>) -> color_eyre::Result<Option<Action>> {
+        let action = match event {
+            Some(Event::Key(key_event)) => self.handle_key_event(key_event)?,
+            Some(Event::Mouse(mouse_event)) => self.handle_mouse_event(mouse_event)?,
+            _ => None,
+        };
+        Ok(action)
+    }
+    /// Handle key events and produce actions if necessary.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - A key event to be processed.
+    ///
+    /// # Returns
+    ///
+    /// * [`color_eyre::Result<Option<Action>>`] - An action to be processed or none.
+    fn handle_key_event(&mut self, key: KeyEvent) -> color_eyre::Result<Option<Action>> {
+        let _ = key; // to appease clippy
+        Ok(None)
+    }
+    /// Handle mouse events and produce actions if necessary.
+    ///
+    /// # Arguments
+    ///
+    /// * `mouse` - A mouse event to be processed.
+    ///
+    /// # Returns
+    ///
+    /// * [`color_eyre::Result<Option<Action>>`] - An action to be processed or none.
+    fn handle_mouse_event(&mut self, mouse: MouseEvent) -> color_eyre::Result<Option<Action>> {
+        let _ = mouse; // to appease clippy
+        Ok(None)
+    }
+    /// Update the state of the component based on a received action. (REQUIRED)
+    ///
+    /// # Arguments
+    ///
+    /// * `action` - An action that may modify the state of the component.
+    ///
+    /// # Returns
+    ///
+    /// * [`color_eyre::Result<Option<Action>>`] - An action to be processed or none.
+    fn update(&mut self, action: Action) -> color_eyre::Result<Option<Action>> {
+        let _ = action; // to appease clippy
+        Ok(None)
+    }
+    /// Render the component on the screen. (REQUIRED)
+    ///
+    /// # Arguments
+    ///
+    /// * `f` - A frame used for rendering.
+    /// * `area` - The area in which the component should be drawn.
+    ///
+    /// # Returns
+    ///
+    /// * [`color_eyre::Result<()>`] - An Ok result or an error.
+    fn draw(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::Result<()>;
 }

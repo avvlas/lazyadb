@@ -1,4 +1,4 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Avd {
     pub name: String,
     pub running_serial: Option<String>,

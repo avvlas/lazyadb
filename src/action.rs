@@ -1,7 +1,11 @@
 use serde::{Deserialize, Serialize};
 use strum::Display;
 
-#[derive(Debug, Clone, PartialEq, Eq, Display, Serialize, Deserialize)]
+use crate::adb::device::Device;
+use crate::adb::emulator::Avd;
+use crate::app::FocusPanel;
+
+#[derive(Debug, Clone, PartialEq, Display, Serialize, Deserialize)]
 pub enum Action {
     Tick,
     Render,
@@ -20,4 +24,14 @@ pub enum Action {
     EmulatorListDown,
     KillEmulator,
     EmulatorSelect,
+    #[serde(skip)]
+    DevicesUpdated(Vec<Device>),
+    #[serde(skip)]
+    EmulatorsUpdated(Vec<Avd>),
+    #[serde(skip)]
+    StartEmulatorByName(String),
+    #[serde(skip)]
+    KillEmulatorBySerial(String),
+    #[serde(skip)]
+    FocusChanged(FocusPanel),
 }
