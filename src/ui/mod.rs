@@ -1,11 +1,12 @@
 pub mod device_list;
+pub mod emulator_list;
 
 use ratatui::{
+    Frame,
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
-    Frame,
 };
 
 use crate::app::{App, FocusPanel};
@@ -21,30 +22,29 @@ pub fn draw(frame: &mut Frame, app: &App) {
     ])
     .split(area);
 
-    draw_title_bar(frame, vertical[0], app);
+    draw_title_bar(frame, vertical[0]);
 
-    // Middle: device list (20%) | content (80%)
-    let middle = Layout::horizontal([
-        Constraint::Percentage(20),
-        Constraint::Percentage(80),
-    ])
-    .split(vertical[1]);
+    // Middle: sidebar (20%) | content (80%)
+    let middle = Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
+        .split(vertical[1]);
 
-    device_list::draw(frame, middle[0], app);
+    // Sidebar: devices (top 50%) | emulators (bottom 50%)
+    let sidebar =
+        Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).split(middle[0]);
+
+    device_list::draw(frame, sidebar[0], app);
+    emulator_list::draw(frame, sidebar[1], app);
     draw_content_area(frame, middle[1], matches!(app.focus, FocusPanel::Content));
-    draw_command_bar(frame, vertical[2]);
+    draw_command_bar(frame, vertical[2], app);
 
     if app.show_help {
         draw_help_overlay(frame, area);
     }
 }
 
-fn draw_title_bar(frame: &mut Frame, area: Rect, app: &App) {
-    let columns = Layout::horizontal([
-        Constraint::Percentage(50),
-        Constraint::Percentage(50),
-    ])
-    .split(area);
+fn draw_title_bar(frame: &mut Frame, area: Rect) {
+    let columns =
+        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area);
 
     let title = Paragraph::new(Line::from(vec![Span::styled(
         "LazyADB v0.1.0",
@@ -53,24 +53,10 @@ fn draw_title_bar(frame: &mut Frame, area: Rect, app: &App) {
             .add_modifier(Modifier::BOLD),
     )]));
 
-    let device_span = if let Some(device) = app.active_device() {
-        let color = match device.state {
-            crate::adb::device::DeviceState::Online => Color::Green,
-            _ => Color::Yellow,
-        };
-        Line::from(vec![
-            Span::styled("device: ", Style::default().fg(Color::DarkGray)),
-            Span::styled(
-                format!("{} ({})", device.display_name(), device.serial),
-                Style::default().fg(color),
-            ),
-        ])
-    } else {
-        Line::from(vec![Span::styled(
-            "device: <none>",
-            Style::default().fg(Color::DarkGray),
-        )])
-    };
+    let device_span = Line::from(vec![Span::styled(
+        "device: <none>",
+        Style::default().fg(Color::DarkGray),
+    )]);
 
     let device = Paragraph::new(device_span).right_aligned();
 
@@ -79,7 +65,11 @@ fn draw_title_bar(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn draw_content_area(frame: &mut Frame, area: Rect, focused: bool) {
-    let border_color = if focused { Color::Green } else { Color::DarkGray };
+    let border_color = if focused {
+        Color::Green
+    } else {
+        Color::DarkGray
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" CONTENT ")
@@ -88,20 +78,15 @@ fn draw_content_area(frame: &mut Frame, area: Rect, focused: bool) {
     frame.render_widget(paragraph, area);
 }
 
-fn draw_command_bar(frame: &mut Frame, area: Rect) {
-    let columns = Layout::horizontal([
-        Constraint::Min(0),
-        Constraint::Length(8),
-    ])
-    .split(area);
+fn draw_command_bar(frame: &mut Frame, area: Rect, app: &App) {
+    let columns = Layout::horizontal([Constraint::Min(0), Constraint::Length(8)]).split(area);
 
     // Left: keymap hints
-    let hints = vec![
-        ("q", "Quit"),
-        ("Tab", "Focus"),
-        ("j/k", "Select"),
-        ("Enter", "Activate"),
-    ];
+    let mut hints = vec![("q", "Quit"), ("Tab", "Focus"), ("j/k", "Select")];
+    if matches!(app.focus, FocusPanel::Emulators) {
+        hints.push(("Enter", "Start"));
+        hints.push(("x", "Kill"));
+    }
     let mut spans = Vec::new();
     for (i, (key, desc)) in hints.iter().enumerate() {
         if i > 0 {
@@ -136,10 +121,10 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect) {
 Keybindings
 ───────────
 q         Quit
-Tab       Cycle focus
-j / ↓     Select next device
-k / ↑     Select previous device
-Enter     Activate selected device
+Tab       Cycle focus (Devices → Emulators → Content)
+j / ↓     Select next item
+k / ↑     Select previous item
+x         Kill running emulator (Emulators panel)
 ?         Toggle help
 Esc       Close modal";
 
