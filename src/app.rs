@@ -7,10 +7,10 @@ use serde::{Deserialize, Serialize};
 use crate::adb::client::AdbClient;
 use crate::adb::device::{ConnectionType, Device};
 use crate::adb::emulator::Avd;
+use crate::component;
 use crate::config::Config;
 use crate::event::{self, AppEvent};
 use crate::keys;
-use crate::ui;
 
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum FocusPanel {
@@ -75,7 +75,7 @@ impl App {
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         while self.running {
-            terminal.draw(|frame| ui::draw(frame, self))?;
+            terminal.draw(|frame| component::draw(frame, self))?;
             self.handle_events()?;
         }
         Ok(())
@@ -145,10 +145,10 @@ impl App {
     }
 
     pub fn kill_selected_emulator(&mut self) {
-        if let Some(avd) = self.emulators.get(self.selected_emulator_index) {
-            if let Some(serial) = &avd.running_serial {
-                let _ = self.adb.kill_emulator(serial);
-            }
+        if let Some(avd) = self.emulators.get(self.selected_emulator_index)
+            && let Some(serial) = &avd.running_serial
+        {
+            let _ = self.adb.kill_emulator(serial);
         }
     }
 

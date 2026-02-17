@@ -1,11 +1,11 @@
 mod action;
 mod adb;
 mod app;
+mod component;
 mod config;
 mod event;
 mod keys;
 mod logging;
-mod ui;
 
 use color_eyre::Result;
 

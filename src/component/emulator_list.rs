@@ -6,11 +6,10 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState},
 };
 
-use crate::adb::device::DeviceState;
-use crate::app::App;
+use crate::app::{App, FocusPanel};
 
 pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
-    let focused = matches!(app.focus, crate::app::FocusPanel::DeviceList);
+    let focused = matches!(app.focus, FocusPanel::Emulators);
     let border_color = if focused {
         Color::Green
     } else {
@@ -18,32 +17,30 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
     };
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(" DEVICES ")
+        .title(" EMULATORS ")
         .border_style(Style::default().fg(border_color));
 
-    let physical = app.physical_devices();
-
-    if physical.is_empty() {
-        let paragraph = ratatui::widgets::Paragraph::new("(no devices)").block(block);
+    if app.emulators.is_empty() {
+        let paragraph = ratatui::widgets::Paragraph::new("(no AVDs)").block(block);
         frame.render_widget(paragraph, area);
         return;
     }
 
-    let items: Vec<ListItem> = physical
+    let items: Vec<ListItem> = app
+        .emulators
         .iter()
-        .map(|device| {
-            let (icon, icon_color) = match device.state {
-                DeviceState::Online => ("●", Color::Green),
-                DeviceState::Offline => ("○", Color::Red),
-                DeviceState::Unauthorized => ("⚠", Color::Yellow),
-                DeviceState::Unknown(_) => ("?", Color::DarkGray),
+        .map(|avd| {
+            let (icon, icon_color) = if avd.is_running() {
+                ("▶", Color::Green)
+            } else {
+                ("■", Color::DarkGray)
             };
 
-            let name = device.display_name();
+            let suffix = if avd.is_running() { " (running)" } else { "" };
 
             let line = Line::from(vec![
                 Span::styled(format!("{} ", icon), Style::default().fg(icon_color)),
-                Span::raw(format!("{}", name)),
+                Span::raw(format!("{}{}", avd.display_name(), suffix)),
             ]);
             ListItem::new(line)
         })
@@ -55,6 +52,6 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
             .add_modifier(Modifier::BOLD),
     );
 
-    let mut state = ListState::default().with_selected(Some(app.selected_device_index));
+    let mut state = ListState::default().with_selected(Some(app.selected_emulator_index));
     frame.render_stateful_widget(list, area, &mut state);
 }

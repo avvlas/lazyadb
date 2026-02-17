@@ -7,11 +7,8 @@ use crate::config::Config;
 pub fn handle_key_event(app: &mut App, key: KeyEvent, config: &Config) {
     // Modal override: when help is shown, only allow closing it
     if app.show_help {
-        if let Some(action) = lookup_action(key, app, config) {
-            match action {
-                Action::CloseModal | Action::ToggleHelp => app.close_modal(),
-                _ => {}
-            }
+        if let Some(Action::CloseModal | Action::ToggleHelp) = lookup_action(key, app, config) {
+            app.close_modal()
         }
         return;
     }

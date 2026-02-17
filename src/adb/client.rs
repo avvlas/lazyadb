@@ -13,8 +13,8 @@ fn resolve_emulator_path() -> String {
         .or_else(|_| std::env::var("ANDROID_SDK_ROOT"))
         .ok();
 
-        let candidate = PathBuf::from(&sdk).join("emulator").join("emulator");
     if let Some(sdk) = sdk_dir {
+        let candidate = PathBuf::from(&sdk).join("emulator").join("emulator");
         if candidate.exists() {
             return candidate.to_string_lossy().into_owned();
         }
