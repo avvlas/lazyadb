@@ -11,9 +11,11 @@ use ratatui::{
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
+use tracing::debug;
 
 use crate::action::Action;
 use crate::adb::client::AdbClient;
+use crate::component::Component;
 use crate::component::content_area::ContentAreaComponent;
 use crate::component::device_list::DeviceListComponent;
 use crate::component::emulator_list::EmulatorListComponent;
@@ -41,6 +43,7 @@ impl FocusPanel {
 
 pub struct App {
     running: bool,
+    should_suspend: bool,
     focus: FocusPanel,
     config: Config,
     adb: AdbClient,
@@ -69,6 +72,7 @@ impl App {
 
         Ok(Self {
             running: true,
+            should_suspend: false,
             focus: FocusPanel::DeviceList,
             config,
             adb,
@@ -82,36 +86,61 @@ impl App {
         })
     }
 
-    pub async fn run(&mut self, tui: &mut Tui) -> Result<()> {
+    pub async fn run(&mut self) -> Result<()> {
+        let mut tui = Tui::new()?;
         tui.enter()?;
 
-        while self.running {
-            tui.draw(|frame| self.draw(frame))?;
+        for component in self.components() {
+            component.init(tui.size()?)?;
+        }
 
-            if let Some(event) = tui.next_event().await {
-                match event {
-                    Event::Render => continue,
-                    Event::Key(key) => self.handle_key(key),
-                    Event::Tick => {
-                        if self.last_refresh.elapsed() >= std::time::Duration::from_secs(2) {
-                            self.action_tx.send(Action::RefreshDevices)?;
-                        }
-                    }
-                    Event::Resize(w, h) => {
-                        self.action_tx.send(Action::Resize(w, h))?;
-                    }
-                    _ => {}
-                }
-            }
+        loop {
+            self.handle_events(&mut tui).await?;
+            self.handle_actions(&mut tui)?;
 
-            // Drain action queue
-            while let Ok(action) = self.action_rx.try_recv() {
-                self.dispatch_action(action)?;
+            if self.should_suspend {
+                tui.suspend()?;
+                self.action_tx.send(Action::Resume)?;
+                self.action_tx.send(Action::ClearScreen)?;
+                tui.enter()?;
+            } else if !self.running {
+                tui.stop()?;
+                break;
             }
         }
 
         tui.exit()?;
         Ok(())
+    }
+
+    async fn handle_events(&mut self, tui: &mut Tui) -> color_eyre::Result<()> {
+        let Some(event) = tui.next_event().await else {
+            return Ok(());
+        };
+        let action_tx = self.action_tx.clone();
+        match event {
+            Event::Quit => action_tx.send(Action::Quit)?,
+            Event::Tick => action_tx.send(Action::Tick)?,
+            Event::Render => action_tx.send(Action::Render)?,
+            Event::Resize(x, y) => action_tx.send(Action::Resize(x, y))?,
+            Event::Key(key) => self.handle_key(key),
+            _ => {}
+        }
+        for component in self.components() {
+            if let Some(action) = component.handle_events(Some(event.clone()))? {
+                action_tx.send(action)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn components(&mut self) -> [&mut dyn Component; 4] {
+        [
+            &mut self.device_list,
+            &mut self.emulator_list,
+            &mut self.content_area,
+            &mut self.help_modal,
+        ]
     }
 
     fn handle_key(&self, key: KeyEvent) {
@@ -138,71 +167,81 @@ impl App {
             .cloned()
     }
 
-    fn dispatch_action(&mut self, action: Action) -> Result<()> {
-        let mut follow_ups = Vec::new();
+    fn handle_actions(&mut self, tui: &mut Tui) -> color_eyre::Result<()> {
+        while let Ok(action) = self.action_rx.try_recv() {
+            self.handle_action(action, tui)?;
+        }
+        Ok(())
+    }
 
-        match &action {
-            Action::Quit => {
-                self.running = false;
-                return Ok(());
+    fn handle_action(&mut self, action: Action, tui: &mut Tui) -> Result<()> {
+        if action != Action::Tick && action != Action::Render {
+            debug!("{action:?}");
+        }
+
+        match action {
+            Action::Tick => {
+                if self.last_refresh.elapsed() >= std::time::Duration::from_secs(2) {
+                    self.action_tx.send(Action::RefreshDevices)?;
+                }
             }
+            Action::Quit => self.running = false,
+            Action::Suspend => self.should_suspend = true,
+            Action::Resume => self.should_suspend = false,
+            Action::ClearScreen => tui.terminal.clear()?,
+            Action::Resize(w, h) => self.handle_resize(tui, w, h)?,
+            Action::Render => self.render(tui)?,
+
             Action::CycleFocus => {
                 self.focus = self.focus.next();
-                let focus_action = Action::FocusChanged(self.focus);
-                follow_ups.push(focus_action.clone());
-                // Broadcast to all components
-                self.broadcast_action(focus_action, &mut follow_ups)?;
-                for fu in follow_ups {
-                    self.dispatch_action(fu)?;
-                }
-                return Ok(());
+                self.action_tx.send(Action::FocusChanged(self.focus))?;
             }
             Action::RefreshDevices => {
                 if let Ok(devices) = self.adb.devices() {
                     let emulators = self.adb.avds_with_status(&devices);
-                    follow_ups.push(Action::DevicesUpdated(devices));
-                    follow_ups.push(Action::EmulatorsUpdated(emulators));
+                    self.action_tx.send(Action::DevicesUpdated(devices))?;
+                    self.action_tx.send(Action::EmulatorsUpdated(emulators))?;
                 }
                 self.last_refresh = Instant::now();
             }
             Action::StartEmulatorByName(name) => {
-                let _ = self.adb.start_emulator(name);
+                let _ = self.adb.start_emulator(&name);
                 return Ok(());
             }
             Action::KillEmulatorBySerial(serial) => {
-                let _ = self.adb.kill_emulator(serial);
+                let _ = self.adb.kill_emulator(&serial);
                 return Ok(());
             }
             Action::FocusChanged(panel) => {
-                self.focus = *panel;
+                self.focus = panel;
             }
             _ => {}
         }
 
         // Broadcast to all components
-        self.broadcast_action(action, &mut follow_ups)?;
-
-        // Dispatch follow-ups
-        for fu in follow_ups {
-            self.dispatch_action(fu)?;
-        }
+        self.broadcast_action(action)?;
 
         Ok(())
     }
 
-    fn broadcast_action(&mut self, action: Action, follow_ups: &mut Vec<Action>) -> Result<()> {
-        if let Some(fu) = self.device_list.update(action.clone())? {
-            follow_ups.push(fu);
+    fn broadcast_action(&mut self, action: Action) -> Result<()> {
+        let action_tx = self.action_tx.clone();
+        for component in self.components() {
+            if let Some(fu) = component.update(action.clone())? {
+                action_tx.send(fu)?;
+            }
         }
-        if let Some(fu) = self.emulator_list.update(action.clone())? {
-            follow_ups.push(fu);
-        }
-        if let Some(fu) = self.content_area.update(action.clone())? {
-            follow_ups.push(fu);
-        }
-        if let Some(fu) = self.help_modal.update(action)? {
-            follow_ups.push(fu);
-        }
+        Ok(())
+    }
+
+    fn handle_resize(&mut self, tui: &mut Tui, w: u16, h: u16) -> color_eyre::Result<()> {
+        tui.resize(Rect::new(0, 0, w, h))?;
+        self.render(tui)?;
+        Ok(())
+    }
+
+    fn render(&mut self, tui: &mut Tui) -> color_eyre::Result<()> {
+        tui.draw(|frame| self.draw(frame))?;
         Ok(())
     }
 
@@ -261,9 +300,16 @@ fn draw_command_bar(frame: &mut Frame, area: Rect, focus: FocusPanel) {
     let columns = Layout::horizontal([Constraint::Min(0), Constraint::Length(8)]).split(area);
 
     let mut hints = vec![("q", "Quit"), ("Tab", "Focus"), ("j/k", "Select")];
-    if matches!(focus, FocusPanel::Emulators) {
-        hints.push(("Enter", "Start"));
-        hints.push(("x", "Kill"));
+    match focus {
+        FocusPanel::DeviceList => {
+            hints.push(("r", "Refresh"));
+        }
+        FocusPanel::Emulators => {
+            hints.push(("r", "Refresh"));
+            hints.push(("Enter", "Start"));
+            hints.push(("x", "Kill"));
+        }
+        _ => {}
     }
     let mut spans = Vec::new();
     for (i, (key, desc)) in hints.iter().enumerate() {

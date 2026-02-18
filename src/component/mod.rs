@@ -3,9 +3,8 @@ use ratatui::{
     Frame,
     layout::{Rect, Size},
 };
-use tokio::sync::mpsc::UnboundedSender;
 
-use crate::{action::Action, config::Config, tui::Event};
+use crate::{action::Action, tui::Event};
 
 pub mod content_area;
 pub mod device_list;
@@ -17,32 +16,6 @@ pub mod help_modal;
 /// Implementors of this trait can be registered with the main application loop and will be able to
 /// receive events, update state, and be rendered on the screen.
 pub trait Component {
-    /// Register an action handler that can send actions for processing if necessary.
-    ///
-    /// # Arguments
-    ///
-    /// * `tx` - An unbounded sender that can send actions.
-    ///
-    /// # Returns
-    ///
-    /// * [`color_eyre::Result<()>`] - An Ok result or an error.
-    fn register_action_handler(&mut self, tx: UnboundedSender<Action>) -> color_eyre::Result<()> {
-        let _ = tx; // to appease clippy
-        Ok(())
-    }
-    /// Register a configuration handler that provides configuration settings if necessary.
-    ///
-    /// # Arguments
-    ///
-    /// * `config` - Configuration settings.
-    ///
-    /// # Returns
-    ///
-    /// * [`color_eyre::Result<()>`] - An Ok result or an error.
-    fn register_config_handler(&mut self, config: Config) -> color_eyre::Result<()> {
-        let _ = config; // to appease clippy
-        Ok(())
-    }
     /// Initialize the component with a specified area if necessary.
     ///
     /// # Arguments

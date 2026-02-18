@@ -12,8 +12,8 @@ use color_eyre::Result;
 async fn main() -> Result<()> {
     color_eyre::install()?;
     logging::init()?;
-    let mut tui = tui::Tui::new()?;
+
     let mut app = app::App::new()?;
-    app.run(&mut tui).await?;
+    app.run().await?;
     Ok(())
 }

@@ -11,19 +11,26 @@ pub enum Action {
     Render,
     Resize(u16, u16),
     Quit,
+    ClearScreen,
     Suspend,
+    Resume,
     Error(String),
     Help,
+
     CycleFocus,
+
     ToggleHelp,
     CloseModal,
+
     DeviceListUp,
     DeviceListDown,
     RefreshDevices,
+
     EmulatorListUp,
     EmulatorListDown,
     KillEmulator,
     EmulatorSelect,
+
     #[serde(skip)]
     DevicesUpdated(Vec<Device>),
     #[serde(skip)]
