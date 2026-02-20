@@ -1,11 +1,10 @@
-use serde::{Deserialize, Serialize};
 use strum::Display;
 
 use crate::adb::device::Device;
 use crate::adb::emulator::Avd;
 use crate::app::FocusPanel;
 
-#[derive(Debug, Clone, PartialEq, Display, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Display)]
 pub enum Action {
     Tick,
     Render,
@@ -14,10 +13,9 @@ pub enum Action {
     ClearScreen,
     Suspend,
     Resume,
-    Error(String),
-    Help,
 
     CycleFocus,
+    Focus(FocusPanel),
 
     ToggleHelp,
     CloseModal,
@@ -25,16 +23,11 @@ pub enum Action {
     DeviceListUp,
     DeviceListDown,
     RefreshDevices,
+    DevicesUpdated(Vec<Device>),
 
     EmulatorListUp,
     EmulatorListDown,
     KillEmulator,
     EmulatorSelect,
-
-    #[serde(skip)]
-    DevicesUpdated(Vec<Device>),
-    #[serde(skip)]
     EmulatorsUpdated(Vec<Avd>),
-    #[serde(skip)]
-    FocusChanged(FocusPanel),
 }

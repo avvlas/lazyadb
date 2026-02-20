@@ -43,7 +43,7 @@ pub fn update(state: &mut State, action: &Action) -> Vec<Command> {
         Action::EmulatorSelect => {
             if let Some(avd) = state.emulators.items.get(state.emulators.selected_index) {
                 if avd.is_running() {
-                    return vec![Command::SendAction(Action::FocusChanged(
+                    return vec![Command::SendAction(Action::Focus(
                         FocusPanel::Content,
                     ))];
                 } else {

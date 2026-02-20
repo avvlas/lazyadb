@@ -1,0 +1,365 @@
+use std::collections::HashMap;
+
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use serde::{Deserialize, de::Deserializer};
+
+use crate::action::Action;
+use crate::app::FocusPanel;
+
+#[derive(Clone, Debug, Default)]
+pub struct KeyBindings(pub HashMap<FocusPanel, HashMap<Vec<KeyEvent>, Action>>);
+
+impl<'de> Deserialize<'de> for KeyBindings {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let parsed_map =
+            HashMap::<FocusPanel, HashMap<String, String>>::deserialize(deserializer)?;
+
+        let keybindings = parsed_map
+            .into_iter()
+            .filter_map(|(panel, inner_map)| {
+                let context = panel_to_context(&panel);
+                let converted: HashMap<Vec<KeyEvent>, Action> = inner_map
+                    .into_iter()
+                    .filter_map(|(key_str, action_name)| {
+                        let keys = parse_key_sequence(&key_str).ok()?;
+                        let action = semantic_to_action(context, &action_name)?;
+                        Some((keys, action))
+                    })
+                    .collect();
+                if converted.is_empty() {
+                    None
+                } else {
+                    Some((panel, converted))
+                }
+            })
+            .collect();
+
+        Ok(KeyBindings(keybindings))
+    }
+}
+
+fn panel_to_context(panel: &FocusPanel) -> &'static str {
+    match panel {
+        FocusPanel::DeviceList => "devices",
+        FocusPanel::Emulators => "emulators",
+        FocusPanel::Content => "content",
+    }
+}
+
+/// Convert a (context, action_name) pair into a typed Action.
+/// Returns None for unknown actions (silently ignored).
+fn semantic_to_action(context: &str, action: &str) -> Option<Action> {
+    match (context, action) {
+        // Global (duplicated per-context in config, matched with wildcard)
+        (_, "Quit") => Some(Action::Quit),
+        (_, "Suspend") => Some(Action::Suspend),
+        (_, "CycleFocus") => Some(Action::CycleFocus),
+        (_, "ToggleHelp") => Some(Action::ToggleHelp),
+        (_, "CloseModal") => Some(Action::CloseModal),
+        (_, "RefreshDevices") => Some(Action::RefreshDevices),
+
+        // Device list
+        ("devices", "DeviceListUp") => Some(Action::DeviceListUp),
+        ("devices", "DeviceListDown") => Some(Action::DeviceListDown),
+
+        // Emulators
+        ("emulators", "EmulatorListUp") => Some(Action::EmulatorListUp),
+        ("emulators", "EmulatorListDown") => Some(Action::EmulatorListDown),
+        ("emulators", "EmulatorSelect") => Some(Action::EmulatorSelect),
+        ("emulators", "KillEmulator") => Some(Action::KillEmulator),
+
+        _ => None,
+    }
+}
+
+fn parse_key_event(raw: &str) -> Result<KeyEvent, String> {
+    let raw_lower = raw.to_ascii_lowercase();
+    let (remaining, modifiers) = extract_modifiers(&raw_lower);
+    parse_key_code_with_modifiers(remaining, modifiers)
+}
+
+fn extract_modifiers(raw: &str) -> (&str, KeyModifiers) {
+    let mut modifiers = KeyModifiers::empty();
+    let mut current = raw;
+
+    loop {
+        match current {
+            rest if rest.starts_with("ctrl-") => {
+                modifiers.insert(KeyModifiers::CONTROL);
+                current = &rest[5..];
+            }
+            rest if rest.starts_with("alt-") => {
+                modifiers.insert(KeyModifiers::ALT);
+                current = &rest[4..];
+            }
+            rest if rest.starts_with("shift-") => {
+                modifiers.insert(KeyModifiers::SHIFT);
+                current = &rest[6..];
+            }
+            _ => break,
+        };
+    }
+
+    (current, modifiers)
+}
+
+fn parse_key_code_with_modifiers(
+    raw: &str,
+    mut modifiers: KeyModifiers,
+) -> Result<KeyEvent, String> {
+    let c = match raw {
+        "esc" => KeyCode::Esc,
+        "enter" => KeyCode::Enter,
+        "left" => KeyCode::Left,
+        "right" => KeyCode::Right,
+        "up" => KeyCode::Up,
+        "down" => KeyCode::Down,
+        "home" => KeyCode::Home,
+        "end" => KeyCode::End,
+        "pageup" => KeyCode::PageUp,
+        "pagedown" => KeyCode::PageDown,
+        "backtab" => {
+            modifiers.insert(KeyModifiers::SHIFT);
+            KeyCode::BackTab
+        }
+        "backspace" => KeyCode::Backspace,
+        "delete" => KeyCode::Delete,
+        "insert" => KeyCode::Insert,
+        "f1" => KeyCode::F(1),
+        "f2" => KeyCode::F(2),
+        "f3" => KeyCode::F(3),
+        "f4" => KeyCode::F(4),
+        "f5" => KeyCode::F(5),
+        "f6" => KeyCode::F(6),
+        "f7" => KeyCode::F(7),
+        "f8" => KeyCode::F(8),
+        "f9" => KeyCode::F(9),
+        "f10" => KeyCode::F(10),
+        "f11" => KeyCode::F(11),
+        "f12" => KeyCode::F(12),
+        "space" => KeyCode::Char(' '),
+        "hyphen" => KeyCode::Char('-'),
+        "minus" => KeyCode::Char('-'),
+        "tab" => KeyCode::Tab,
+        c if c.len() == 1 => {
+            let mut c = c.chars().next().unwrap();
+            if modifiers.contains(KeyModifiers::SHIFT) {
+                c = c.to_ascii_uppercase();
+            }
+            KeyCode::Char(c)
+        }
+        _ => return Err(format!("Unable to parse {raw}")),
+    };
+    Ok(KeyEvent::new(c, modifiers))
+}
+
+pub fn key_event_to_string(key_event: &KeyEvent) -> String {
+    let char;
+    let key_code = match key_event.code {
+        KeyCode::Backspace => "backspace",
+        KeyCode::Enter => "enter",
+        KeyCode::Left => "left",
+        KeyCode::Right => "right",
+        KeyCode::Up => "up",
+        KeyCode::Down => "down",
+        KeyCode::Home => "home",
+        KeyCode::End => "end",
+        KeyCode::PageUp => "pageup",
+        KeyCode::PageDown => "pagedown",
+        KeyCode::Tab => "tab",
+        KeyCode::BackTab => "backtab",
+        KeyCode::Delete => "delete",
+        KeyCode::Insert => "insert",
+        KeyCode::F(c) => {
+            char = format!("f({c})");
+            &char
+        }
+        KeyCode::Char(' ') => "space",
+        KeyCode::Char(c) => {
+            char = c.to_string();
+            &char
+        }
+        KeyCode::Esc => "esc",
+        KeyCode::Null => "",
+        KeyCode::CapsLock => "",
+        KeyCode::Menu => "",
+        KeyCode::ScrollLock => "",
+        KeyCode::Media(_) => "",
+        KeyCode::NumLock => "",
+        KeyCode::PrintScreen => "",
+        KeyCode::Pause => "",
+        KeyCode::KeypadBegin => "",
+        KeyCode::Modifier(_) => "",
+    };
+
+    let mut modifiers = Vec::with_capacity(3);
+
+    if key_event.modifiers.intersects(KeyModifiers::CONTROL) {
+        modifiers.push("ctrl");
+    }
+
+    if key_event.modifiers.intersects(KeyModifiers::SHIFT) {
+        modifiers.push("shift");
+    }
+
+    if key_event.modifiers.intersects(KeyModifiers::ALT) {
+        modifiers.push("alt");
+    }
+
+    let mut key = modifiers.join("-");
+
+    if !key.is_empty() {
+        key.push('-');
+    }
+    key.push_str(key_code);
+
+    key
+}
+
+pub fn parse_key_sequence(raw: &str) -> Result<Vec<KeyEvent>, String> {
+    if raw.chars().filter(|c| *c == '>').count() != raw.chars().filter(|c| *c == '<').count() {
+        return Err(format!("Unable to parse `{}`", raw));
+    }
+    let raw = if !raw.contains("><") {
+        let raw = raw.strip_prefix('<').unwrap_or(raw);
+        raw.strip_prefix('>').unwrap_or(raw)
+    } else {
+        raw
+    };
+    let sequences = raw
+        .split("><")
+        .map(|seq| {
+            if let Some(s) = seq.strip_prefix('<') {
+                s
+            } else if let Some(s) = seq.strip_suffix('>') {
+                s
+            } else {
+                seq
+            }
+        })
+        .collect::<Vec<_>>();
+
+    sequences.into_iter().map(parse_key_event).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+
+    #[test]
+    fn test_simple_keys() {
+        assert_eq!(
+            parse_key_event("a").unwrap(),
+            KeyEvent::new(KeyCode::Char('a'), KeyModifiers::empty())
+        );
+
+        assert_eq!(
+            parse_key_event("enter").unwrap(),
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::empty())
+        );
+
+        assert_eq!(
+            parse_key_event("esc").unwrap(),
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::empty())
+        );
+    }
+
+    #[test]
+    fn test_with_modifiers() {
+        assert_eq!(
+            parse_key_event("ctrl-a").unwrap(),
+            KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL)
+        );
+
+        assert_eq!(
+            parse_key_event("alt-enter").unwrap(),
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT)
+        );
+
+        assert_eq!(
+            parse_key_event("shift-esc").unwrap(),
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::SHIFT)
+        );
+    }
+
+    #[test]
+    fn test_multiple_modifiers() {
+        assert_eq!(
+            parse_key_event("ctrl-alt-a").unwrap(),
+            KeyEvent::new(
+                KeyCode::Char('a'),
+                KeyModifiers::CONTROL | KeyModifiers::ALT
+            )
+        );
+
+        assert_eq!(
+            parse_key_event("ctrl-shift-enter").unwrap(),
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL | KeyModifiers::SHIFT)
+        );
+    }
+
+    #[test]
+    fn test_reverse_multiple_modifiers() {
+        assert_eq!(
+            key_event_to_string(&KeyEvent::new(
+                KeyCode::Char('a'),
+                KeyModifiers::CONTROL | KeyModifiers::ALT
+            )),
+            "ctrl-alt-a".to_string()
+        );
+    }
+
+    #[test]
+    fn test_invalid_keys() {
+        assert!(parse_key_event("invalid-key").is_err());
+        assert!(parse_key_event("ctrl-invalid-key").is_err());
+    }
+
+    #[test]
+    fn test_case_insensitivity() {
+        assert_eq!(
+            parse_key_event("CTRL-a").unwrap(),
+            KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL)
+        );
+
+        assert_eq!(
+            parse_key_event("AlT-eNtEr").unwrap(),
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT)
+        );
+    }
+
+    #[test]
+    fn test_semantic_to_action() {
+        assert_eq!(semantic_to_action("devices", "Quit"), Some(Action::Quit));
+        assert_eq!(
+            semantic_to_action("devices", "DeviceListUp"),
+            Some(Action::DeviceListUp)
+        );
+        assert_eq!(
+            semantic_to_action("emulators", "KillEmulator"),
+            Some(Action::KillEmulator)
+        );
+        assert_eq!(semantic_to_action("devices", "KillEmulator"), None);
+        assert_eq!(semantic_to_action("devices", "nonexistent"), None);
+    }
+
+    #[test]
+    fn test_config() -> color_eyre::Result<()> {
+        let c = super::super::Config::new()?;
+        assert_eq!(
+            c.keybindings
+                .0
+                .get(&FocusPanel::DeviceList)
+                .unwrap()
+                .get(&parse_key_sequence("<q>").unwrap_or_default())
+                .unwrap(),
+            &Action::Quit
+        );
+        Ok(())
+    }
+}

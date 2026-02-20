@@ -169,7 +169,7 @@ impl App {
                 self.state.focus = self.state.focus.next();
                 self.state
                     .action_tx
-                    .send(Action::FocusChanged(self.state.focus))?;
+                    .send(Action::Focus(self.state.focus))?;
             }
             Action::RefreshDevices => {
                 if let Ok(devices) = self.state.adb.devices() {
@@ -181,7 +181,7 @@ impl App {
                 }
                 self.state.last_refresh = Instant::now();
             }
-            Action::FocusChanged(panel) => {
+            Action::Focus(panel) => {
                 self.state.focus = panel;
             }
             _ => {}
