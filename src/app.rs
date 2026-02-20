@@ -13,24 +13,24 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tracing::debug;
 
-use crate::message::Msg;
 use crate::adb::client::AdbClient;
 use crate::command::Command;
 use crate::config::Config;
+use crate::message::Msg;
 use crate::modals;
 use crate::panes;
 use crate::state::{ContentState, DevicesState, EmulatorsState, ModalState, State};
 use crate::tui::{Event, Tui};
 
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum FocusPanel {
+pub enum Pane {
     #[default]
     DeviceList,
     Emulators,
     Content,
 }
 
-impl FocusPanel {
+impl Pane {
     pub fn next(&self) -> Self {
         match self {
             Self::DeviceList => Self::Emulators,
@@ -57,7 +57,7 @@ impl App {
             state: State {
                 running: true,
                 should_suspend: false,
-                focus: FocusPanel::DeviceList,
+                focus: Pane::DeviceList,
                 config,
                 adb,
                 last_refresh: Instant::now(),
@@ -269,15 +269,15 @@ fn draw_title_bar(frame: &mut Frame, area: Rect) {
     frame.render_widget(device, columns[1]);
 }
 
-fn draw_command_bar(frame: &mut Frame, area: Rect, focus: FocusPanel) {
+fn draw_command_bar(frame: &mut Frame, area: Rect, focus: Pane) {
     let columns = Layout::horizontal([Constraint::Min(0), Constraint::Length(8)]).split(area);
 
     let mut hints = vec![("q", "Quit"), ("Tab", "Focus"), ("j/k", "Select")];
     match focus {
-        FocusPanel::DeviceList => {
+        Pane::DeviceList => {
             hints.push(("r", "Refresh"));
         }
-        FocusPanel::Emulators => {
+        Pane::Emulators => {
             hints.push(("r", "Refresh"));
             hints.push(("Enter", "Start"));
             hints.push(("x", "Kill"));

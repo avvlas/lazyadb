@@ -3,17 +3,17 @@ use std::collections::HashMap;
 use ratatui::style::{Color, Modifier, Style};
 use serde::{Deserialize, de::Deserializer};
 
-use crate::app::FocusPanel;
+use crate::app::Pane;
 
 #[derive(Clone, Debug, Default)]
-pub struct Styles(pub HashMap<FocusPanel, HashMap<String, Style>>);
+pub struct Styles(pub HashMap<Pane, HashMap<String, Style>>);
 
 impl<'de> Deserialize<'de> for Styles {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let parsed_map = HashMap::<FocusPanel, HashMap<String, String>>::deserialize(deserializer)?;
+        let parsed_map = HashMap::<Pane, HashMap<String, String>>::deserialize(deserializer)?;
 
         let styles = parsed_map
             .into_iter()

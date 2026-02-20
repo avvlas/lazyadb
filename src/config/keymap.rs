@@ -4,17 +4,17 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{Deserialize, de::Deserializer};
 
 use crate::message::Msg;
-use crate::app::FocusPanel;
+use crate::app::Pane;
 
 #[derive(Clone, Debug, Default)]
-pub struct KeyBindings(pub HashMap<FocusPanel, HashMap<Vec<KeyEvent>, Msg>>);
+pub struct KeyBindings(pub HashMap<Pane, HashMap<Vec<KeyEvent>, Msg>>);
 
 impl<'de> Deserialize<'de> for KeyBindings {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let parsed_map = HashMap::<FocusPanel, HashMap<String, String>>::deserialize(deserializer)?;
+        let parsed_map = HashMap::<Pane, HashMap<String, String>>::deserialize(deserializer)?;
 
         let keybindings = parsed_map
             .into_iter()
@@ -40,11 +40,11 @@ impl<'de> Deserialize<'de> for KeyBindings {
     }
 }
 
-fn panel_to_context(panel: &FocusPanel) -> &'static str {
+fn panel_to_context(panel: &Pane) -> &'static str {
     match panel {
-        FocusPanel::DeviceList => "devices",
-        FocusPanel::Emulators => "emulators",
-        FocusPanel::Content => "content",
+        Pane::DeviceList => "devices",
+        Pane::Emulators => "emulators",
+        Pane::Content => "content",
     }
 }
 
@@ -353,7 +353,7 @@ mod tests {
         assert_eq!(
             c.keybindings
                 .0
-                .get(&FocusPanel::DeviceList)
+                .get(&Pane::DeviceList)
                 .unwrap()
                 .get(&parse_key_sequence("<q>").unwrap_or_default())
                 .unwrap(),

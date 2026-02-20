@@ -6,7 +6,7 @@ use crate::message::Msg;
 use crate::adb::client::AdbClient;
 use crate::adb::device::Device;
 use crate::adb::emulator::Avd;
-use crate::app::FocusPanel;
+use crate::app::Pane;
 use crate::config::Config;
 
 pub struct DevicesState {
@@ -30,7 +30,7 @@ pub enum ModalState {
 pub struct State {
     pub running: bool,
     pub should_suspend: bool,
-    pub focus: FocusPanel,
+    pub focus: Pane,
     pub config: Config,
     pub adb: AdbClient,
     pub last_refresh: Instant,

@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::message::Msg;
-use crate::app::FocusPanel;
+use crate::app::Pane;
 use crate::command::Command;
 use crate::state::State;
 
@@ -43,7 +43,7 @@ pub fn update(state: &mut State, action: &Msg) -> Vec<Command> {
         Msg::EmulatorSelect => {
             if let Some(avd) = state.emulators.items.get(state.emulators.selected_index) {
                 if avd.is_running() {
-                    return vec![Command::Focus(FocusPanel::Content)];
+                    return vec![Command::Focus(Pane::Content)];
                 } else {
                     return vec![Command::StartEmulator(avd.name.clone())];
                 }
@@ -55,7 +55,7 @@ pub fn update(state: &mut State, action: &Msg) -> Vec<Command> {
 }
 
 pub fn draw(frame: &mut Frame, area: Rect, state: &State) {
-    let focused = state.focus == FocusPanel::Emulators;
+    let focused = state.focus == Pane::Emulators;
     let border_color = if focused {
         Color::Green
     } else {

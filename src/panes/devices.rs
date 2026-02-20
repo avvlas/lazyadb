@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::message::Msg;
 use crate::adb::device::{ConnectionType, Device, DeviceState};
-use crate::app::FocusPanel;
+use crate::app::Pane;
 use crate::command::Command;
 use crate::state::State;
 
@@ -45,7 +45,7 @@ pub fn update(state: &mut State, action: &Msg) -> Vec<Command> {
 }
 
 pub fn draw(frame: &mut Frame, area: Rect, state: &State) {
-    let focused = state.focus == FocusPanel::DeviceList;
+    let focused = state.focus == Pane::DeviceList;
     let border_color = if focused {
         Color::Green
     } else {
