@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use tokio::sync::mpsc;
 
-use crate::action::Action;
+use crate::message::Msg;
 use crate::adb::client::AdbClient;
 use crate::adb::device::Device;
 use crate::adb::emulator::Avd;
@@ -34,8 +34,8 @@ pub struct State {
     pub config: Config,
     pub adb: AdbClient,
     pub last_refresh: Instant,
-    pub action_tx: mpsc::UnboundedSender<Action>,
-    pub action_rx: mpsc::UnboundedReceiver<Action>,
+    pub action_tx: mpsc::UnboundedSender<Msg>,
+    pub action_rx: mpsc::UnboundedReceiver<Msg>,
     pub devices: DevicesState,
     pub emulators: EmulatorsState,
     pub content: ContentState,

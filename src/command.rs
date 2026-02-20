@@ -1,7 +1,7 @@
-use crate::action::Action;
+use crate::app::FocusPanel;
 
 pub enum Command {
     StartEmulator(String),
     KillEmulator(String),
-    SendAction(Action),
+    Focus(FocusPanel),
 }

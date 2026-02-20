@@ -3,25 +3,24 @@ use std::collections::HashMap;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{Deserialize, de::Deserializer};
 
-use crate::action::Action;
+use crate::message::Msg;
 use crate::app::FocusPanel;
 
 #[derive(Clone, Debug, Default)]
-pub struct KeyBindings(pub HashMap<FocusPanel, HashMap<Vec<KeyEvent>, Action>>);
+pub struct KeyBindings(pub HashMap<FocusPanel, HashMap<Vec<KeyEvent>, Msg>>);
 
 impl<'de> Deserialize<'de> for KeyBindings {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let parsed_map =
-            HashMap::<FocusPanel, HashMap<String, String>>::deserialize(deserializer)?;
+        let parsed_map = HashMap::<FocusPanel, HashMap<String, String>>::deserialize(deserializer)?;
 
         let keybindings = parsed_map
             .into_iter()
             .filter_map(|(panel, inner_map)| {
                 let context = panel_to_context(&panel);
-                let converted: HashMap<Vec<KeyEvent>, Action> = inner_map
+                let converted: HashMap<Vec<KeyEvent>, Msg> = inner_map
                     .into_iter()
                     .filter_map(|(key_str, action_name)| {
                         let keys = parse_key_sequence(&key_str).ok()?;
@@ -51,25 +50,25 @@ fn panel_to_context(panel: &FocusPanel) -> &'static str {
 
 /// Convert a (context, action_name) pair into a typed Action.
 /// Returns None for unknown actions (silently ignored).
-fn semantic_to_action(context: &str, action: &str) -> Option<Action> {
+fn semantic_to_action(context: &str, action: &str) -> Option<Msg> {
     match (context, action) {
         // Global (duplicated per-context in config, matched with wildcard)
-        (_, "Quit") => Some(Action::Quit),
-        (_, "Suspend") => Some(Action::Suspend),
-        (_, "CycleFocus") => Some(Action::CycleFocus),
-        (_, "ToggleHelp") => Some(Action::ToggleHelp),
-        (_, "CloseModal") => Some(Action::CloseModal),
-        (_, "RefreshDevices") => Some(Action::RefreshDevices),
+        (_, "Quit") => Some(Msg::Quit),
+        (_, "Suspend") => Some(Msg::Suspend),
+        (_, "CycleFocus") => Some(Msg::CycleFocus),
+        (_, "ToggleHelp") => Some(Msg::ToggleHelp),
+        (_, "CloseModal") => Some(Msg::CloseModal),
+        (_, "RefreshDevices") => Some(Msg::RefreshDevices),
 
         // Device list
-        ("devices", "DeviceListUp") => Some(Action::DeviceListUp),
-        ("devices", "DeviceListDown") => Some(Action::DeviceListDown),
+        ("devices", "DeviceListUp") => Some(Msg::DeviceListUp),
+        ("devices", "DeviceListDown") => Some(Msg::DeviceListDown),
 
         // Emulators
-        ("emulators", "EmulatorListUp") => Some(Action::EmulatorListUp),
-        ("emulators", "EmulatorListDown") => Some(Action::EmulatorListDown),
-        ("emulators", "EmulatorSelect") => Some(Action::EmulatorSelect),
-        ("emulators", "KillEmulator") => Some(Action::KillEmulator),
+        ("emulators", "EmulatorListUp") => Some(Msg::EmulatorListUp),
+        ("emulators", "EmulatorListDown") => Some(Msg::EmulatorListDown),
+        ("emulators", "EmulatorSelect") => Some(Msg::EmulatorSelect),
+        ("emulators", "KillEmulator") => Some(Msg::KillEmulator),
 
         _ => None,
     }
@@ -335,14 +334,14 @@ mod tests {
 
     #[test]
     fn test_semantic_to_action() {
-        assert_eq!(semantic_to_action("devices", "Quit"), Some(Action::Quit));
+        assert_eq!(semantic_to_action("devices", "Quit"), Some(Msg::Quit));
         assert_eq!(
             semantic_to_action("devices", "DeviceListUp"),
-            Some(Action::DeviceListUp)
+            Some(Msg::DeviceListUp)
         );
         assert_eq!(
             semantic_to_action("emulators", "KillEmulator"),
-            Some(Action::KillEmulator)
+            Some(Msg::KillEmulator)
         );
         assert_eq!(semantic_to_action("devices", "KillEmulator"), None);
         assert_eq!(semantic_to_action("devices", "nonexistent"), None);
@@ -358,7 +357,7 @@ mod tests {
                 .unwrap()
                 .get(&parse_key_sequence("<q>").unwrap_or_default())
                 .unwrap(),
-            &Action::Quit
+            &Msg::Quit
         );
         Ok(())
     }

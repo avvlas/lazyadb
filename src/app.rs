@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tracing::debug;
 
-use crate::action::Action;
+use crate::message::Msg;
 use crate::adb::client::AdbClient;
 use crate::command::Command;
 use crate::config::Config;
@@ -87,8 +87,8 @@ impl App {
 
             if self.state.should_suspend {
                 tui.suspend()?;
-                self.state.action_tx.send(Action::Resume)?;
-                self.state.action_tx.send(Action::ClearScreen)?;
+                self.state.action_tx.send(Msg::Resume)?;
+                self.state.action_tx.send(Msg::ClearScreen)?;
                 tui.enter()?;
             } else if !self.state.running {
                 tui.stop()?;
@@ -106,10 +106,10 @@ impl App {
         };
         let action_tx = self.state.action_tx.clone();
         match event {
-            Event::Quit => action_tx.send(Action::Quit)?,
-            Event::Tick => action_tx.send(Action::Tick)?,
-            Event::Render => action_tx.send(Action::Render)?,
-            Event::Resize(x, y) => action_tx.send(Action::Resize(x, y))?,
+            Event::Quit => action_tx.send(Msg::Quit)?,
+            Event::Tick => action_tx.send(Msg::Tick)?,
+            Event::Render => action_tx.send(Msg::Render)?,
+            Event::Resize(x, y) => action_tx.send(Msg::Resize(x, y))?,
             Event::Key(key) => self.handle_key(key),
             _ => {}
         }
@@ -118,8 +118,8 @@ impl App {
 
     fn handle_key(&self, key: KeyEvent) {
         if matches!(self.state.modal, ModalState::Help) {
-            if let Some(Action::CloseModal | Action::ToggleHelp) = self.lookup_action(key) {
-                let _ = self.state.action_tx.send(Action::CloseModal);
+            if let Some(Msg::CloseModal | Msg::ToggleHelp) = self.lookup_action(key) {
+                let _ = self.state.action_tx.send(Msg::CloseModal);
             }
             return;
         }
@@ -129,7 +129,7 @@ impl App {
         }
     }
 
-    fn lookup_action(&self, key: KeyEvent) -> Option<Action> {
+    fn lookup_action(&self, key: KeyEvent) -> Option<Msg> {
         let key_seq = vec![key];
         self.state
             .config
@@ -147,42 +147,36 @@ impl App {
         Ok(())
     }
 
-    fn handle_action(&mut self, action: Action, tui: &mut Tui) -> Result<()> {
-        if action != Action::Tick && action != Action::Render {
+    fn handle_action(&mut self, action: Msg, tui: &mut Tui) -> Result<()> {
+        if action != Msg::Tick && action != Msg::Render {
             debug!("{action:?}");
         }
 
         match action {
-            Action::Tick => {
+            Msg::Tick => {
                 if self.state.last_refresh.elapsed() >= std::time::Duration::from_secs(2) {
-                    self.state.action_tx.send(Action::RefreshDevices)?;
+                    self.state.action_tx.send(Msg::RefreshDevices)?;
                 }
             }
-            Action::Quit => self.state.running = false,
-            Action::Suspend => self.state.should_suspend = true,
-            Action::Resume => self.state.should_suspend = false,
-            Action::ClearScreen => tui.terminal.clear()?,
-            Action::Resize(w, h) => self.handle_resize(tui, w, h)?,
-            Action::Render => self.render(tui)?,
+            Msg::Quit => self.state.running = false,
+            Msg::Suspend => self.state.should_suspend = true,
+            Msg::Resume => self.state.should_suspend = false,
+            Msg::ClearScreen => tui.terminal.clear()?,
+            Msg::Resize(w, h) => self.handle_resize(tui, w, h)?,
+            Msg::Render => self.render(tui)?,
 
-            Action::CycleFocus => {
+            Msg::CycleFocus => {
                 self.state.focus = self.state.focus.next();
-                self.state
-                    .action_tx
-                    .send(Action::Focus(self.state.focus))?;
             }
-            Action::RefreshDevices => {
+            Msg::RefreshDevices => {
                 if let Ok(devices) = self.state.adb.devices() {
                     let emulators = self.state.adb.avds_with_status(&devices);
-                    self.state.action_tx.send(Action::DevicesUpdated(devices))?;
+                    self.state.action_tx.send(Msg::DevicesUpdated(devices))?;
                     self.state
                         .action_tx
-                        .send(Action::EmulatorsUpdated(emulators))?;
+                        .send(Msg::EmulatorsUpdated(emulators))?;
                 }
                 self.state.last_refresh = Instant::now();
-            }
-            Action::Focus(panel) => {
-                self.state.focus = panel;
             }
             _ => {}
         }
@@ -208,8 +202,8 @@ impl App {
                 Command::KillEmulator(serial) => {
                     let _ = self.state.adb.kill_emulator(&serial);
                 }
-                Command::SendAction(action) => {
-                    self.state.action_tx.send(action)?;
+                Command::Focus(panel) => {
+                    self.state.focus = panel;
                 }
             }
         }

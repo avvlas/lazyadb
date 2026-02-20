@@ -2,10 +2,9 @@ use strum::Display;
 
 use crate::adb::device::Device;
 use crate::adb::emulator::Avd;
-use crate::app::FocusPanel;
 
 #[derive(Debug, Clone, PartialEq, Display)]
-pub enum Action {
+pub enum Msg {
     Tick,
     Render,
     Resize(u16, u16),
@@ -15,7 +14,6 @@ pub enum Action {
     Resume,
 
     CycleFocus,
-    Focus(FocusPanel),
 
     ToggleHelp,
     CloseModal,

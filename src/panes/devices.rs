@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
 
-use crate::action::Action;
+use crate::message::Msg;
 use crate::adb::device::{ConnectionType, Device, DeviceState};
 use crate::app::FocusPanel;
 use crate::command::Command;
@@ -19,9 +19,9 @@ fn physical_devices(devices: &[Device]) -> Vec<&Device> {
         .collect()
 }
 
-pub fn update(state: &mut State, action: &Action) -> Vec<Command> {
+pub fn update(state: &mut State, action: &Msg) -> Vec<Command> {
     match action {
-        Action::DevicesUpdated(devices) => {
+        Msg::DevicesUpdated(devices) => {
             state.devices.items = devices.clone();
             let count = physical_devices(&state.devices.items).len();
             if count > 0 {
@@ -30,14 +30,13 @@ pub fn update(state: &mut State, action: &Action) -> Vec<Command> {
                 state.devices.selected_index = 0;
             }
         }
-        Action::DeviceListUp => {
+        Msg::DeviceListUp => {
             state.devices.selected_index = state.devices.selected_index.saturating_sub(1);
         }
-        Action::DeviceListDown => {
+        Msg::DeviceListDown => {
             let count = physical_devices(&state.devices.items).len();
             if count > 0 {
-                state.devices.selected_index =
-                    (state.devices.selected_index + 1).min(count - 1);
+                state.devices.selected_index = (state.devices.selected_index + 1).min(count - 1);
             }
         }
         _ => {}
@@ -47,7 +46,11 @@ pub fn update(state: &mut State, action: &Action) -> Vec<Command> {
 
 pub fn draw(frame: &mut Frame, area: Rect, state: &State) {
     let focused = state.focus == FocusPanel::DeviceList;
-    let border_color = if focused { Color::Green } else { Color::DarkGray };
+    let border_color = if focused {
+        Color::Green
+    } else {
+        Color::DarkGray
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" DEVICES ")

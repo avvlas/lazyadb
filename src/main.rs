@@ -1,11 +1,11 @@
-mod action;
 mod adb;
 mod app;
 mod command;
 mod config;
 mod logging;
-mod panes;
+mod message;
 mod modals;
+mod panes;
 mod state;
 mod tui;
 

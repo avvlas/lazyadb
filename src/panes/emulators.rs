@@ -6,14 +6,14 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
 
-use crate::action::Action;
+use crate::message::Msg;
 use crate::app::FocusPanel;
 use crate::command::Command;
 use crate::state::State;
 
-pub fn update(state: &mut State, action: &Action) -> Vec<Command> {
+pub fn update(state: &mut State, action: &Msg) -> Vec<Command> {
     match action {
-        Action::EmulatorsUpdated(emulators) => {
+        Msg::EmulatorsUpdated(emulators) => {
             state.emulators.items = emulators.clone();
             if !state.emulators.items.is_empty() {
                 state.emulators.selected_index = state
@@ -24,28 +24,26 @@ pub fn update(state: &mut State, action: &Action) -> Vec<Command> {
                 state.emulators.selected_index = 0;
             }
         }
-        Action::EmulatorListUp => {
+        Msg::EmulatorListUp => {
             state.emulators.selected_index = state.emulators.selected_index.saturating_sub(1);
         }
-        Action::EmulatorListDown => {
+        Msg::EmulatorListDown => {
             if !state.emulators.items.is_empty() {
-                state.emulators.selected_index = (state.emulators.selected_index + 1)
-                    .min(state.emulators.items.len() - 1);
+                state.emulators.selected_index =
+                    (state.emulators.selected_index + 1).min(state.emulators.items.len() - 1);
             }
         }
-        Action::KillEmulator => {
+        Msg::KillEmulator => {
             if let Some(avd) = state.emulators.items.get(state.emulators.selected_index)
                 && let Some(serial) = &avd.running_serial
             {
                 return vec![Command::KillEmulator(serial.clone())];
             }
         }
-        Action::EmulatorSelect => {
+        Msg::EmulatorSelect => {
             if let Some(avd) = state.emulators.items.get(state.emulators.selected_index) {
                 if avd.is_running() {
-                    return vec![Command::SendAction(Action::Focus(
-                        FocusPanel::Content,
-                    ))];
+                    return vec![Command::Focus(FocusPanel::Content)];
                 } else {
                     return vec![Command::StartEmulator(avd.name.clone())];
                 }
@@ -58,7 +56,11 @@ pub fn update(state: &mut State, action: &Action) -> Vec<Command> {
 
 pub fn draw(frame: &mut Frame, area: Rect, state: &State) {
     let focused = state.focus == FocusPanel::Emulators;
-    let border_color = if focused { Color::Green } else { Color::DarkGray };
+    let border_color = if focused {
+        Color::Green
+    } else {
+        Color::DarkGray
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" EMULATORS ")
@@ -97,7 +99,6 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &State) {
             .add_modifier(Modifier::BOLD),
     );
 
-    let mut list_state =
-        ListState::default().with_selected(Some(state.emulators.selected_index));
+    let mut list_state = ListState::default().with_selected(Some(state.emulators.selected_index));
     frame.render_stateful_widget(list, area, &mut list_state);
 }

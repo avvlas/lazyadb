@@ -5,18 +5,22 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::action::Action;
+use crate::message::Msg;
 use crate::app::FocusPanel;
 use crate::command::Command;
 use crate::state::State;
 
-pub fn update(_state: &mut State, _action: &Action) -> Vec<Command> {
+pub fn update(_state: &mut State, _action: &Msg) -> Vec<Command> {
     Vec::new()
 }
 
 pub fn draw(frame: &mut Frame, area: Rect, state: &State) {
     let focused = state.focus == FocusPanel::Content;
-    let border_color = if focused { Color::Green } else { Color::DarkGray };
+    let border_color = if focused {
+        Color::Green
+    } else {
+        Color::DarkGray
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .title(" CONTENT ")
