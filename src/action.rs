@@ -36,9 +36,5 @@ pub enum Action {
     #[serde(skip)]
     EmulatorsUpdated(Vec<Avd>),
     #[serde(skip)]
-    StartEmulatorByName(String),
-    #[serde(skip)]
-    KillEmulatorBySerial(String),
-    #[serde(skip)]
     FocusChanged(FocusPanel),
 }
