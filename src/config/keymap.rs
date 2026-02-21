@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{Deserialize, de::Deserializer};
+use tracing::debug;
 
-use crate::message::Action;
-use crate::panes::Pane;
+use crate::{action::Action, components::panes::Pane};
 
 #[derive(Clone, Debug, Default)]
 pub struct KeyBindings(pub HashMap<Pane, HashMap<Vec<KeyEvent>, Action>>);
@@ -36,6 +36,7 @@ impl<'de> Deserialize<'de> for KeyBindings {
             })
             .collect();
 
+        debug!("Keybinginds: {keybindings:?}");
         Ok(KeyBindings(keybindings))
     }
 }
@@ -56,7 +57,8 @@ fn semantic_to_action(context: &str, action: &str) -> Option<Action> {
         (_, "Quit") => Some(Action::Quit),
         (_, "Suspend") => Some(Action::Suspend),
         (_, "CycleFocus") => Some(Action::CycleFocus),
-        (_, "ToggleHelp") => Some(Action::ToggleHelp),
+        (_, "CycleFocusBackwards") => Some(Action::CycleFocusBackwards),
+        (_, "ToggleHelp") => Some(Action::OpenHelp),
         (_, "CloseModal") => Some(Action::CloseModal),
         (_, "RefreshDevices") => Some(Action::RefreshDevices),
 
@@ -157,7 +159,7 @@ fn parse_key_code_with_modifiers(
     Ok(KeyEvent::new(c, modifiers))
 }
 
-pub fn key_event_to_string(key_event: &KeyEvent) -> String {
+fn key_event_to_string(key_event: &KeyEvent) -> String {
     let char;
     let key_code = match key_event.code {
         KeyCode::Backspace => "backspace",
@@ -220,7 +222,7 @@ pub fn key_event_to_string(key_event: &KeyEvent) -> String {
     key
 }
 
-pub fn parse_key_sequence(raw: &str) -> Result<Vec<KeyEvent>, String> {
+fn parse_key_sequence(raw: &str) -> Result<Vec<KeyEvent>, String> {
     if raw.chars().filter(|c| *c == '>').count() != raw.chars().filter(|c| *c == '<').count() {
         return Err(format!("Unable to parse `{}`", raw));
     }

@@ -1,7 +1,6 @@
 use strum::Display;
 
 use crate::adb::device::Device;
-use crate::adb::emulator::Avd;
 
 #[derive(Debug, Clone, PartialEq, Display)]
 pub enum Action {
@@ -14,8 +13,9 @@ pub enum Action {
     Resume,
 
     CycleFocus,
+    CycleFocusBackwards,
 
-    ToggleHelp,
+    OpenHelp,
     CloseModal,
     OpenEmulators,
 
@@ -29,5 +29,4 @@ pub enum Action {
     EmulatorListDown,
     KillEmulator,
     EmulatorSelect,
-    EmulatorsUpdated(Vec<Avd>),
 }

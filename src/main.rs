@@ -1,15 +1,14 @@
+mod action;
 mod adb;
 mod app;
 mod command;
+mod components;
 mod config;
-mod logging;
-mod message;
-mod modals;
-mod panes;
-mod state;
 mod tui;
 
 use color_eyre::Result;
+
+use crate::config::logging;
 
 #[tokio::main]
 async fn main() -> Result<()> {

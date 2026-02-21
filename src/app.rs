@@ -13,17 +13,32 @@ use ratatui::{
 use tokio::sync::mpsc;
 use tracing::debug;
 
-use crate::command::Command;
-use crate::config::Config;
-use crate::message::Action;
-use crate::modals;
-use crate::panes;
-use crate::state::{ContentState, DevicesState, EmulatorsState, ModalState, State};
-use crate::tui::{Event, Tui};
-use crate::{adb::client::AdbClient, panes::Pane};
+use crate::{
+    action::Action,
+    adb::client::AdbClient,
+    command::Command,
+    components::{
+        Component, DrawContext,
+        modals::{Modal, emulators::EmulatorsModal, help::HelpModal},
+        panes::{Pane, content::ContentPane, devices::DevicesPane},
+    },
+    config::Config,
+    tui::{Event, Tui},
+};
 
 pub struct App {
-    state: State,
+    running: bool,
+    should_suspend: bool,
+    focus: Pane,
+    config: Config,
+    adb: AdbClient,
+    last_refresh: Instant,
+
+    devices: DevicesPane,
+    content: ContentPane,
+
+    modal: Option<Modal>,
+
     action_tx: mpsc::UnboundedSender<Action>,
     action_rx: mpsc::UnboundedReceiver<Action>,
 }
@@ -33,29 +48,22 @@ impl App {
         let config = Config::new().map_err(|e| color_eyre::eyre::eyre!("{e}"))?;
         let adb = AdbClient::new()?;
         let devices = adb.devices().unwrap_or_default();
-        let emulators = adb.avds_with_status(&devices);
 
         let (action_tx, action_rx) = mpsc::unbounded_channel();
 
         Ok(Self {
-            state: State {
-                running: true,
-                should_suspend: false,
-                focus: Pane::DeviceList,
-                config,
-                adb,
-                last_refresh: Instant::now(),
-                devices: DevicesState {
-                    items: devices,
-                    selected_index: 0,
-                },
-                emulators: EmulatorsState {
-                    items: emulators,
-                    selected_index: 0,
-                },
-                content: ContentState {},
-                modal: ModalState::None,
-            },
+            running: true,
+            should_suspend: false,
+            focus: Pane::DeviceList,
+            config,
+            adb,
+            last_refresh: Instant::now(),
+
+            devices: DevicesPane::new(devices),
+            content: ContentPane::new(),
+
+            modal: None,
+
             action_tx,
             action_rx,
         })
@@ -69,13 +77,13 @@ impl App {
             self.handle_events(&mut tui).await?;
             self.handle_actions(&mut tui)?;
 
-            if self.state.should_suspend {
-                tracing::debug!("Suspending app");
+            if self.should_suspend {
+                debug!("Suspending app");
                 tui.suspend()?;
                 self.action_tx.send(Action::Resume)?;
                 self.action_tx.send(Action::ClearScreen)?;
                 tui.enter()?;
-            } else if !self.state.running {
+            } else if !self.running {
                 tui.stop()?;
                 break;
             }
@@ -102,29 +110,35 @@ impl App {
     }
 
     fn handle_key(&self, key: KeyEvent) {
-        // Help modal: only allow closing
-        if matches!(self.state.modal, ModalState::Help) {
-            if let Some(Action::CloseModal | Action::ToggleHelp) = self.lookup_action(key) {
-                let _ = self.action_tx.send(Action::CloseModal);
-            }
-            return;
-        }
+        debug!("Handle key: {}", key.code);
 
-        // Emulators modal: route keys through Emulators keybindings
-        if matches!(self.state.modal, ModalState::Emulators) {
-            if let Some(action) = self.lookup_emulator_action(key) {
-                match action {
-                    Action::EmulatorListUp
-                    | Action::EmulatorListDown
-                    | Action::EmulatorSelect
-                    | Action::KillEmulator
-                    | Action::CloseModal => {
-                        let _ = self.action_tx.send(action);
+        if let Some(ref modal) = self.modal {
+            match modal {
+                // Help modal: only allow closing
+                Modal::Help(_) => {
+                    if let Some(Action::CloseModal | Action::OpenHelp) = self.lookup_action(key) {
+                        let _ = self.action_tx.send(Action::CloseModal);
                     }
-                    _ => {}
+                    return;
+                }
+
+                // Emulators modal: route keys through Emulators keybindings
+                Modal::Emulators(_) => {
+                    if let Some(action) = self.lookup_emulator_action(key) {
+                        match action {
+                            Action::EmulatorListUp
+                            | Action::EmulatorListDown
+                            | Action::EmulatorSelect
+                            | Action::KillEmulator
+                            | Action::CloseModal => {
+                                let _ = self.action_tx.send(action);
+                            }
+                            _ => {}
+                        }
+                    }
+                    return;
                 }
             }
-            return;
         }
 
         if let Some(action) = self.lookup_action(key) {
@@ -134,19 +148,17 @@ impl App {
 
     fn lookup_action(&self, key: KeyEvent) -> Option<Action> {
         let key_seq = vec![key];
-        self.state
-            .config
+        self.config
             .keybindings
             .0
-            .get(&self.state.focus)
+            .get(&self.focus)
             .and_then(|bindings: &HashMap<Vec<KeyEvent>, Action>| bindings.get(&key_seq))
             .cloned()
     }
 
     fn lookup_emulator_action(&self, key: KeyEvent) -> Option<Action> {
         let key_seq = vec![key];
-        self.state
-            .config
+        self.config
             .keybindings
             .0
             .get(&Pane::Emulators)
@@ -163,62 +175,86 @@ impl App {
 
     fn handle_action(&mut self, action: Action, tui: &mut Tui) -> Result<()> {
         if action != Action::Tick && action != Action::Render {
-            debug!("{action:?}");
+            debug!("Handling action: {action:?}");
         }
 
         match action {
             Action::Tick => {
-                if self.state.last_refresh.elapsed() >= std::time::Duration::from_secs(2) {
+                if self.last_refresh.elapsed() >= std::time::Duration::from_secs(2) {
                     self.action_tx.send(Action::RefreshDevices)?;
                 }
             }
-            Action::Quit => self.state.running = false,
-            Action::Suspend => self.state.should_suspend = true,
-            Action::Resume => self.state.should_suspend = false,
+            Action::Quit => self.running = false,
+            Action::Suspend => self.should_suspend = true,
+            Action::Resume => self.should_suspend = false,
             Action::ClearScreen => tui.terminal.clear()?,
             Action::Resize(w, h) => self.handle_resize(tui, w, h)?,
             Action::Render => self.render(tui)?,
 
             Action::CycleFocus => {
-                self.state.focus = self.state.focus.next();
+                self.focus = self.focus.next();
             }
-            Action::RefreshDevices => {
-                if let Ok(devices) = self.state.adb.devices() {
-                    let emulators = self.state.adb.avds_with_status(&devices);
-                    self.action_tx.send(Action::DevicesUpdated(devices))?;
-                    self.action_tx.send(Action::EmulatorsUpdated(emulators))?;
-                }
-                self.state.last_refresh = Instant::now();
+            Action::CycleFocusBackwards => {
+                self.focus = self.focus.prev();
             }
+
+            Action::OpenHelp => self.modal = Some(Modal::Help(HelpModal::new())),
+            Action::CloseModal => self.modal = None,
             _ => {}
         }
 
-        // Delegate to pane update functions and collect commands
+        // Delegate to component update methods and collect commands
         let mut commands = Vec::new();
-        commands.extend(panes::devices::update(&mut self.state, &action));
-        commands.extend(panes::content::update(&mut self.state, &action));
-        commands.extend(modals::help::update(&mut self.state, &action));
-        commands.extend(modals::emulators::update(&mut self.state, &action));
+        for component in self.components() {
+            commands.extend(component.update(&action));
+        }
 
         self.execute_commands(commands)?;
 
         Ok(())
     }
 
+    fn components(&mut self) -> Vec<&mut dyn Component> {
+        let mut components: Vec<&mut dyn Component> = vec![&mut self.devices, &mut self.content];
+
+        if let Some(ref mut modal) = self.modal {
+            match modal {
+                Modal::Help(help) => components.push(help),
+                Modal::Emulators(emulators) => components.push(emulators),
+            }
+        }
+
+        components
+    }
+
     fn execute_commands(&mut self, commands: Vec<Command>) -> Result<()> {
         for cmd in commands {
             match cmd {
                 Command::StartEmulator(name) => {
-                    let _ = self.state.adb.start_emulator(&name);
+                    let _ = self.adb.start_emulator(&name);
                 }
                 Command::KillEmulator(serial) => {
-                    let _ = self.state.adb.kill_emulator(&serial);
+                    let _ = self.adb.kill_emulator(&serial);
                 }
+                Command::OpenEmulatorsModal => {
+                    let emulators = self.adb.avds_with_status(&self.devices.items);
+                    self.modal = Some(Modal::Emulators(EmulatorsModal::new(emulators)))
+                }
+                Command::CloseEmulatorsModal => self.modal = None,
                 Command::DisconnectDevice(serial) => {
-                    let _ = self.state.adb.disconnect_device(&serial);
+                    let _ = self.adb.disconnect_device(&serial);
                 }
                 Command::Focus(panel) => {
-                    self.state.focus = panel;
+                    self.focus = panel;
+                }
+                Command::CycleFocus => {
+                    self.focus = self.focus.next();
+                }
+                Command::RefreshDevices => {
+                    if let Ok(devices) = self.adb.devices() {
+                        self.action_tx.send(Action::DevicesUpdated(devices))?;
+                        self.last_refresh = Instant::now();
+                    }
                 }
             }
         }
@@ -226,6 +262,8 @@ impl App {
     }
 
     fn handle_resize(&mut self, tui: &mut Tui, w: u16, h: u16) -> Result<()> {
+        debug!("Resizing: {} x {}", w, h);
+
         tui.resize(Rect::new(0, 0, w, h))?;
         self.render(tui)?;
         Ok(())
@@ -239,6 +277,11 @@ impl App {
     fn draw(&self, frame: &mut Frame) {
         let area = frame.area();
 
+        let ctx = DrawContext {
+            focus: self.focus,
+            config: &self.config,
+        };
+
         let vertical = Layout::vertical([
             Constraint::Length(1),
             Constraint::Min(3),
@@ -251,11 +294,16 @@ impl App {
         let middle = Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
             .split(vertical[1]);
 
-        panes::devices::draw(frame, middle[0], &self.state);
-        panes::content::draw(frame, middle[1], &self.state);
-        draw_command_bar(frame, vertical[2], self.state.focus);
-        modals::help::draw(frame, area, &self.state);
-        modals::emulators::draw(frame, area, &self.state);
+        self.devices.draw(frame, middle[0], &ctx);
+        self.content.draw(frame, middle[1], &ctx);
+        draw_command_bar(frame, vertical[2], self.focus);
+
+        if let Some(ref modal) = self.modal {
+            match modal {
+                Modal::Help(help) => help.draw(frame, area, &ctx),
+                Modal::Emulators(emulators) => emulators.draw(frame, area, &ctx),
+            }
+        }
     }
 }
 

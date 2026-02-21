@@ -12,6 +12,7 @@
       "<x>": "DisconnectDevice",
       "<r>": "RefreshDevices",
       "<Tab>": "CycleFocus",
+      "<Backtab>": "CycleFocusBackwards",
       "<e>": "OpenEmulators",
       "<?>": "ToggleHelp",
       "<Esc>": "CloseModal"
@@ -28,6 +29,7 @@
       "<x>": "KillEmulator",
       "<Enter>": "EmulatorSelect",
       "<Tab>": "CycleFocus",
+      "<Backtab>": "CycleFocusBackwards",
       "<?>": "ToggleHelp",
       "<Esc>": "CloseModal"
     },
@@ -37,6 +39,7 @@
       "<Ctrl-c>": "Quit",
       "<Ctrl-z>": "Suspend",
       "<Tab>": "CycleFocus",
+      "<Backtab>": "CycleFocusBackwards",
       "<?>": "ToggleHelp",
       "<Esc>": "CloseModal"
     }

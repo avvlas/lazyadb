@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 mod keymap;
+pub mod logging;
 mod styles;
 
 pub use keymap::KeyBindings;

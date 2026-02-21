@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ratatui::style::{Color, Modifier, Style};
 use serde::{Deserialize, de::Deserializer};
 
-use crate::panes::Pane;
+use crate::components::panes::Pane;
 
 #[derive(Clone, Debug, Default)]
 pub struct Styles(pub HashMap<Pane, HashMap<String, Style>>);

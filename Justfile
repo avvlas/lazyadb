@@ -1,2 +1,2 @@
 dev:
-    LAZYADB_DATA=.data cargo run
+    LAZYADB_DATA=.data LAZYADB_LOG_LEVEL=debug cargo run
