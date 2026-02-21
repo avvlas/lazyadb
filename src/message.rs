@@ -17,9 +17,11 @@ pub enum Action {
 
     ToggleHelp,
     CloseModal,
+    OpenEmulators,
 
     DeviceListUp,
     DeviceListDown,
+    DisconnectDevice,
     RefreshDevices,
     DevicesUpdated(Vec<Device>),
 

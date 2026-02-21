@@ -9,8 +9,10 @@
       "<k>": "DeviceListUp",
       "<Down>": "DeviceListDown",
       "<Up>": "DeviceListUp",
+      "<x>": "DisconnectDevice",
       "<r>": "RefreshDevices",
       "<Tab>": "CycleFocus",
+      "<e>": "OpenEmulators",
       "<?>": "ToggleHelp",
       "<Esc>": "CloseModal"
     },

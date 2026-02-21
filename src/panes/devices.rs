@@ -6,24 +6,17 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
 
-use crate::adb::device::{ConnectionType, Device, DeviceState};
+use crate::adb::device::{ConnectionType, DeviceState};
 use crate::command::Command;
 use crate::message::Action;
 use crate::panes::Pane;
 use crate::state::State;
 
-fn physical_devices(devices: &[Device]) -> Vec<&Device> {
-    devices
-        .iter()
-        .filter(|d| d.connection_type != ConnectionType::Emulator)
-        .collect()
-}
-
 pub fn update(state: &mut State, action: &Action) -> Vec<Command> {
     match action {
         Action::DevicesUpdated(devices) => {
             state.devices.items = devices.clone();
-            let count = physical_devices(&state.devices.items).len();
+            let count = state.devices.items.len();
             if count > 0 {
                 state.devices.selected_index = state.devices.selected_index.min(count - 1);
             } else {
@@ -34,9 +27,22 @@ pub fn update(state: &mut State, action: &Action) -> Vec<Command> {
             state.devices.selected_index = state.devices.selected_index.saturating_sub(1);
         }
         Action::DeviceListDown => {
-            let count = physical_devices(&state.devices.items).len();
+            let count = state.devices.items.len();
             if count > 0 {
                 state.devices.selected_index = (state.devices.selected_index + 1).min(count - 1);
+            }
+        }
+        Action::DisconnectDevice => {
+            if let Some(device) = state.devices.items.get(state.devices.selected_index) {
+                match device.connection_type {
+                    ConnectionType::Emulator => {
+                        return vec![Command::KillEmulator(device.serial.clone())];
+                    }
+                    ConnectionType::Tcp => {
+                        return vec![Command::DisconnectDevice(device.serial.clone())];
+                    }
+                    ConnectionType::Usb => {}
+                }
             }
         }
         _ => {}
@@ -56,15 +62,15 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &State) {
         .title(" DEVICES ")
         .border_style(Style::default().fg(border_color));
 
-    let physical = physical_devices(&state.devices.items);
-
-    if physical.is_empty() {
+    if state.devices.items.is_empty() {
         let paragraph = Paragraph::new("(no devices)").block(block);
         frame.render_widget(paragraph, area);
         return;
     }
 
-    let items: Vec<ListItem> = physical
+    let items: Vec<ListItem> = state
+        .devices
+        .items
         .iter()
         .map(|device| {
             let (icon, icon_color) = match device.state {
@@ -74,11 +80,18 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &State) {
                 DeviceState::Unknown(_) => ("?", Color::DarkGray),
             };
 
+            let conn_tag = match device.connection_type {
+                ConnectionType::Usb => " [USB]",
+                ConnectionType::Tcp => " [TCP]",
+                ConnectionType::Emulator => " [EMU]",
+            };
+
             let name = device.display_name();
 
             let line = Line::from(vec![
                 Span::styled(icon.to_string(), Style::default().fg(icon_color)),
-                Span::raw(name.to_string()),
+                Span::raw(format!(" {}", name)),
+                Span::styled(conn_tag, Style::default().fg(Color::DarkGray)),
             ]);
             ListItem::new(line)
         })

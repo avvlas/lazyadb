@@ -1,4 +1,5 @@
-use std::{collections::HashMap, time::Instant};
+use std::collections::HashMap;
+use std::time::Instant;
 
 use color_eyre::Result;
 use crossterm::event::KeyEvent;
@@ -55,8 +56,8 @@ impl App {
                 content: ContentState {},
                 modal: ModalState::None,
             },
-            action_tx: action_tx,
-            action_rx: action_rx,
+            action_tx,
+            action_rx,
         })
     }
 
@@ -69,6 +70,7 @@ impl App {
             self.handle_actions(&mut tui)?;
 
             if self.state.should_suspend {
+                tracing::debug!("Suspending app");
                 tui.suspend()?;
                 self.action_tx.send(Action::Resume)?;
                 self.action_tx.send(Action::ClearScreen)?;
@@ -100,9 +102,27 @@ impl App {
     }
 
     fn handle_key(&self, key: KeyEvent) {
+        // Help modal: only allow closing
         if matches!(self.state.modal, ModalState::Help) {
             if let Some(Action::CloseModal | Action::ToggleHelp) = self.lookup_action(key) {
                 let _ = self.action_tx.send(Action::CloseModal);
+            }
+            return;
+        }
+
+        // Emulators modal: route keys through Emulators keybindings
+        if matches!(self.state.modal, ModalState::Emulators) {
+            if let Some(action) = self.lookup_emulator_action(key) {
+                match action {
+                    Action::EmulatorListUp
+                    | Action::EmulatorListDown
+                    | Action::EmulatorSelect
+                    | Action::KillEmulator
+                    | Action::CloseModal => {
+                        let _ = self.action_tx.send(action);
+                    }
+                    _ => {}
+                }
             }
             return;
         }
@@ -119,6 +139,17 @@ impl App {
             .keybindings
             .0
             .get(&self.state.focus)
+            .and_then(|bindings: &HashMap<Vec<KeyEvent>, Action>| bindings.get(&key_seq))
+            .cloned()
+    }
+
+    fn lookup_emulator_action(&self, key: KeyEvent) -> Option<Action> {
+        let key_seq = vec![key];
+        self.state
+            .config
+            .keybindings
+            .0
+            .get(&Pane::Emulators)
             .and_then(|bindings: &HashMap<Vec<KeyEvent>, Action>| bindings.get(&key_seq))
             .cloned()
     }
@@ -165,9 +196,9 @@ impl App {
         // Delegate to pane update functions and collect commands
         let mut commands = Vec::new();
         commands.extend(panes::devices::update(&mut self.state, &action));
-        commands.extend(panes::emulators::update(&mut self.state, &action));
         commands.extend(panes::content::update(&mut self.state, &action));
         commands.extend(modals::help::update(&mut self.state, &action));
+        commands.extend(modals::emulators::update(&mut self.state, &action));
 
         self.execute_commands(commands)?;
 
@@ -182,6 +213,9 @@ impl App {
                 }
                 Command::KillEmulator(serial) => {
                     let _ = self.state.adb.kill_emulator(&serial);
+                }
+                Command::DisconnectDevice(serial) => {
+                    let _ = self.state.adb.disconnect_device(&serial);
                 }
                 Command::Focus(panel) => {
                     self.state.focus = panel;
@@ -217,14 +251,11 @@ impl App {
         let middle = Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
             .split(vertical[1]);
 
-        let sidebar = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .split(middle[0]);
-
-        panes::devices::draw(frame, sidebar[0], &self.state);
-        panes::emulators::draw(frame, sidebar[1], &self.state);
+        panes::devices::draw(frame, middle[0], &self.state);
         panes::content::draw(frame, middle[1], &self.state);
         draw_command_bar(frame, vertical[2], self.state.focus);
         modals::help::draw(frame, area, &self.state);
+        modals::emulators::draw(frame, area, &self.state);
     }
 }
 
@@ -257,11 +288,8 @@ fn draw_command_bar(frame: &mut Frame, area: Rect, focus: Pane) {
     match focus {
         Pane::DeviceList => {
             hints.push(("r", "Refresh"));
-        }
-        Pane::Emulators => {
-            hints.push(("r", "Refresh"));
-            hints.push(("Enter", "Start"));
-            hints.push(("x", "Kill"));
+            hints.push(("x", "Disconnect"));
+            hints.push(("e", "Emulators"));
         }
         _ => {}
     }

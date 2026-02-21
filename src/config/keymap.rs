@@ -63,6 +63,8 @@ fn semantic_to_action(context: &str, action: &str) -> Option<Action> {
         // Device list
         ("devices", "DeviceListUp") => Some(Action::DeviceListUp),
         ("devices", "DeviceListDown") => Some(Action::DeviceListDown),
+        ("devices", "DisconnectDevice") => Some(Action::DisconnectDevice),
+        ("devices", "OpenEmulators") => Some(Action::OpenEmulators),
 
         // Emulators
         ("emulators", "EmulatorListUp") => Some(Action::EmulatorListUp),

@@ -1,12 +1,9 @@
 use std::time::Instant;
 
-use tokio::sync::mpsc;
-
 use crate::adb::client::AdbClient;
 use crate::adb::device::Device;
 use crate::adb::emulator::Avd;
 use crate::config::Config;
-use crate::message::Action;
 use crate::panes::Pane;
 
 #[allow(dead_code)]
@@ -37,5 +34,6 @@ pub struct ContentState {}
 
 pub enum ModalState {
     Help,
+    Emulators,
     None,
 }

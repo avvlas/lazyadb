@@ -38,10 +38,13 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &State) {
 Keybindings
 ───────────
 q         Quit
-Tab       Cycle focus (Devices → Emulators → Content)
+Tab       Cycle focus (Devices → Content)
 j / ↓     Select next item
 k / ↑     Select previous item
-x         Kill running emulator (Emulators panel)
+x         Disconnect device (TCP/Emulator)
+e         Open emulators popup
+Enter     Start / select emulator (popup)
+x         Kill running emulator (popup)
 ?         Toggle help
 Esc       Close modal";
 

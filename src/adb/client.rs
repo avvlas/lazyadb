@@ -175,4 +175,18 @@ impl AdbClient {
     pub fn kill_emulator(&self, serial: &str) -> Result<String> {
         self.run_for_device(serial, &["emu", "kill"])
     }
+
+    pub fn disconnect_device(&self, serial: &str) -> Result<()> {
+        let output = Command::new(&self.adb_path)
+            .args(["disconnect", serial])
+            .output()
+            .map_err(|e| eyre!("Failed to run 'adb disconnect {}': {}", serial, e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(eyre!("'adb disconnect {}' failed: {}", serial, stderr.trim()));
+        }
+
+        Ok(())
+    }
 }

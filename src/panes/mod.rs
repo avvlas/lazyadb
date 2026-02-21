@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 pub mod content;
 pub mod devices;
-pub mod emulators;
 
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Pane {
@@ -15,7 +14,7 @@ pub enum Pane {
 impl Pane {
     pub fn next(&self) -> Self {
         match self {
-            Self::DeviceList => Self::Emulators,
+            Self::DeviceList => Self::Content,
             Self::Emulators => Self::Content,
             Self::Content => Self::DeviceList,
         }
