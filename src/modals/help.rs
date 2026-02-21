@@ -7,18 +7,18 @@ use ratatui::{
 
 use crate::command::Command;
 use crate::state::State;
-use crate::{message::Msg, state::ModalState};
+use crate::{message::Action, state::ModalState};
 
-pub fn update(state: &mut State, action: &Msg) -> Vec<Command> {
+pub fn update(state: &mut State, action: &Action) -> Vec<Command> {
     match action {
-        Msg::ToggleHelp => {
+        Action::ToggleHelp => {
             if matches!(state.modal, ModalState::None) {
                 state.modal = ModalState::Help;
             } else {
                 state.modal = ModalState::None;
             }
         }
-        Msg::CloseModal => {
+        Action::CloseModal => {
             state.modal = ModalState::None;
         }
         _ => {}

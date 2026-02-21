@@ -1,4 +1,4 @@
-use crate::app::Pane;
+use crate::panes::Pane;
 
 pub enum Command {
     StartEmulator(String),

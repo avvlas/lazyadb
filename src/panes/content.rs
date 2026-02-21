@@ -5,12 +5,12 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::message::Msg;
-use crate::app::Pane;
+use crate::message::Action;
+use crate::panes::Pane;
 use crate::command::Command;
 use crate::state::State;
 
-pub fn update(_state: &mut State, _action: &Msg) -> Vec<Command> {
+pub fn update(_state: &mut State, _action: &Action) -> Vec<Command> {
     Vec::new()
 }
 

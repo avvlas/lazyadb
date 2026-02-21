@@ -6,14 +6,13 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
 
-use crate::message::Msg;
-use crate::app::Pane;
+use crate::{message::Action, panes::Pane};
 use crate::command::Command;
 use crate::state::State;
 
-pub fn update(state: &mut State, action: &Msg) -> Vec<Command> {
+pub fn update(state: &mut State, action: &Action) -> Vec<Command> {
     match action {
-        Msg::EmulatorsUpdated(emulators) => {
+        Action::EmulatorsUpdated(emulators) => {
             state.emulators.items = emulators.clone();
             if !state.emulators.items.is_empty() {
                 state.emulators.selected_index = state
@@ -24,23 +23,23 @@ pub fn update(state: &mut State, action: &Msg) -> Vec<Command> {
                 state.emulators.selected_index = 0;
             }
         }
-        Msg::EmulatorListUp => {
+        Action::EmulatorListUp => {
             state.emulators.selected_index = state.emulators.selected_index.saturating_sub(1);
         }
-        Msg::EmulatorListDown => {
+        Action::EmulatorListDown => {
             if !state.emulators.items.is_empty() {
                 state.emulators.selected_index =
                     (state.emulators.selected_index + 1).min(state.emulators.items.len() - 1);
             }
         }
-        Msg::KillEmulator => {
+        Action::KillEmulator => {
             if let Some(avd) = state.emulators.items.get(state.emulators.selected_index)
                 && let Some(serial) = &avd.running_serial
             {
                 return vec![Command::KillEmulator(serial.clone())];
             }
         }
-        Msg::EmulatorSelect => {
+        Action::EmulatorSelect => {
             if let Some(avd) = state.emulators.items.get(state.emulators.selected_index) {
                 if avd.is_running() {
                     return vec![Command::Focus(Pane::Content)];

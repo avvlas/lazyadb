@@ -4,7 +4,7 @@ use crate::adb::device::Device;
 use crate::adb::emulator::Avd;
 
 #[derive(Debug, Clone, PartialEq, Display)]
-pub enum Msg {
+pub enum Action {
     Tick,
     Render,
     Resize(u16, u16),

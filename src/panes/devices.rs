@@ -6,10 +6,10 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
 
-use crate::message::Msg;
 use crate::adb::device::{ConnectionType, Device, DeviceState};
-use crate::app::Pane;
 use crate::command::Command;
+use crate::message::Action;
+use crate::panes::Pane;
 use crate::state::State;
 
 fn physical_devices(devices: &[Device]) -> Vec<&Device> {
@@ -19,9 +19,9 @@ fn physical_devices(devices: &[Device]) -> Vec<&Device> {
         .collect()
 }
 
-pub fn update(state: &mut State, action: &Msg) -> Vec<Command> {
+pub fn update(state: &mut State, action: &Action) -> Vec<Command> {
     match action {
-        Msg::DevicesUpdated(devices) => {
+        Action::DevicesUpdated(devices) => {
             state.devices.items = devices.clone();
             let count = physical_devices(&state.devices.items).len();
             if count > 0 {
@@ -30,10 +30,10 @@ pub fn update(state: &mut State, action: &Msg) -> Vec<Command> {
                 state.devices.selected_index = 0;
             }
         }
-        Msg::DeviceListUp => {
+        Action::DeviceListUp => {
             state.devices.selected_index = state.devices.selected_index.saturating_sub(1);
         }
-        Msg::DeviceListDown => {
+        Action::DeviceListDown => {
             let count = physical_devices(&state.devices.items).len();
             if count > 0 {
                 state.devices.selected_index = (state.devices.selected_index + 1).min(count - 1);

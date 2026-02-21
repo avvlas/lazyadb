@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{Deserialize, de::Deserializer};
 
-use crate::message::Msg;
-use crate::app::Pane;
+use crate::message::Action;
+use crate::panes::Pane;
 
 #[derive(Clone, Debug, Default)]
-pub struct KeyBindings(pub HashMap<Pane, HashMap<Vec<KeyEvent>, Msg>>);
+pub struct KeyBindings(pub HashMap<Pane, HashMap<Vec<KeyEvent>, Action>>);
 
 impl<'de> Deserialize<'de> for KeyBindings {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -20,7 +20,7 @@ impl<'de> Deserialize<'de> for KeyBindings {
             .into_iter()
             .filter_map(|(panel, inner_map)| {
                 let context = panel_to_context(&panel);
-                let converted: HashMap<Vec<KeyEvent>, Msg> = inner_map
+                let converted: HashMap<Vec<KeyEvent>, Action> = inner_map
                     .into_iter()
                     .filter_map(|(key_str, action_name)| {
                         let keys = parse_key_sequence(&key_str).ok()?;
@@ -50,25 +50,25 @@ fn panel_to_context(panel: &Pane) -> &'static str {
 
 /// Convert a (context, action_name) pair into a typed Action.
 /// Returns None for unknown actions (silently ignored).
-fn semantic_to_action(context: &str, action: &str) -> Option<Msg> {
+fn semantic_to_action(context: &str, action: &str) -> Option<Action> {
     match (context, action) {
         // Global (duplicated per-context in config, matched with wildcard)
-        (_, "Quit") => Some(Msg::Quit),
-        (_, "Suspend") => Some(Msg::Suspend),
-        (_, "CycleFocus") => Some(Msg::CycleFocus),
-        (_, "ToggleHelp") => Some(Msg::ToggleHelp),
-        (_, "CloseModal") => Some(Msg::CloseModal),
-        (_, "RefreshDevices") => Some(Msg::RefreshDevices),
+        (_, "Quit") => Some(Action::Quit),
+        (_, "Suspend") => Some(Action::Suspend),
+        (_, "CycleFocus") => Some(Action::CycleFocus),
+        (_, "ToggleHelp") => Some(Action::ToggleHelp),
+        (_, "CloseModal") => Some(Action::CloseModal),
+        (_, "RefreshDevices") => Some(Action::RefreshDevices),
 
         // Device list
-        ("devices", "DeviceListUp") => Some(Msg::DeviceListUp),
-        ("devices", "DeviceListDown") => Some(Msg::DeviceListDown),
+        ("devices", "DeviceListUp") => Some(Action::DeviceListUp),
+        ("devices", "DeviceListDown") => Some(Action::DeviceListDown),
 
         // Emulators
-        ("emulators", "EmulatorListUp") => Some(Msg::EmulatorListUp),
-        ("emulators", "EmulatorListDown") => Some(Msg::EmulatorListDown),
-        ("emulators", "EmulatorSelect") => Some(Msg::EmulatorSelect),
-        ("emulators", "KillEmulator") => Some(Msg::KillEmulator),
+        ("emulators", "EmulatorListUp") => Some(Action::EmulatorListUp),
+        ("emulators", "EmulatorListDown") => Some(Action::EmulatorListDown),
+        ("emulators", "EmulatorSelect") => Some(Action::EmulatorSelect),
+        ("emulators", "KillEmulator") => Some(Action::KillEmulator),
 
         _ => None,
     }
@@ -334,14 +334,14 @@ mod tests {
 
     #[test]
     fn test_semantic_to_action() {
-        assert_eq!(semantic_to_action("devices", "Quit"), Some(Msg::Quit));
+        assert_eq!(semantic_to_action("devices", "Quit"), Some(Action::Quit));
         assert_eq!(
             semantic_to_action("devices", "DeviceListUp"),
-            Some(Msg::DeviceListUp)
+            Some(Action::DeviceListUp)
         );
         assert_eq!(
             semantic_to_action("emulators", "KillEmulator"),
-            Some(Msg::KillEmulator)
+            Some(Action::KillEmulator)
         );
         assert_eq!(semantic_to_action("devices", "KillEmulator"), None);
         assert_eq!(semantic_to_action("devices", "nonexistent"), None);
@@ -357,7 +357,7 @@ mod tests {
                 .unwrap()
                 .get(&parse_key_sequence("<q>").unwrap_or_default())
                 .unwrap(),
-            &Msg::Quit
+            &Action::Quit
         );
         Ok(())
     }
