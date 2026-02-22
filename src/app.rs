@@ -286,6 +286,16 @@ impl App {
                         self.last_refresh = Instant::now();
                     }
                 }
+                Command::RefreshDeviceInfo(serial) => {
+                    if let Some(device) = self.devices.items.iter().find(|d| d.serial == serial) {
+                        if let Ok(info) = self.adb.fetch_device_info(device) {
+                            self.msg_tx.send(Msg::DeviceInfoUpdated(info))?;
+                        }
+                    }
+                }
+                Command::DeviceSelected(device) => {
+                    self.msg_tx.send(Msg::DeviceSelected(device))?;
+                }
             }
         }
         Ok(())
@@ -319,7 +329,11 @@ impl App {
         ])
         .split(area);
 
-        draw_title_bar(frame, vertical[0]);
+        let selected_device_name = self
+            .devices
+            .selected_device()
+            .map(|d| d.display_name());
+        draw_title_bar(frame, vertical[0], selected_device_name.as_deref());
 
         let middle = Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
             .split(vertical[1]);
@@ -337,7 +351,7 @@ impl App {
     }
 }
 
-fn draw_title_bar(frame: &mut Frame, area: Rect) {
+fn draw_title_bar(frame: &mut Frame, area: Rect, selected_device: Option<&str>) {
     let columns =
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area);
 
@@ -348,9 +362,14 @@ fn draw_title_bar(frame: &mut Frame, area: Rect) {
             .add_modifier(Modifier::BOLD),
     )]));
 
+    let (device_text, device_color) = match selected_device {
+        Some(name) => (format!("device: {}", name), Color::White),
+        None => ("device: <none>".to_string(), Color::DarkGray),
+    };
+
     let device_span = Line::from(vec![Span::styled(
-        "device: <none>",
-        Style::default().fg(Color::DarkGray),
+        device_text,
+        Style::default().fg(device_color),
     )]);
 
     let device = Paragraph::new(device_span).right_aligned();

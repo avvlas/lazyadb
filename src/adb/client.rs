@@ -5,6 +5,7 @@ use color_eyre::{Result, eyre::eyre};
 use tracing::info;
 
 use super::device::{ConnectionType, Device, parse_device_list};
+use super::device_info::*;
 use super::emulator::{Avd, parse_avd_list};
 
 pub struct AdbClient {
@@ -157,6 +158,105 @@ impl AdbClient {
 
     pub fn kill_emulator(&self, serial: &str) -> Result<String> {
         self.run_for_device(serial, &["emu", "kill"])
+    }
+
+    pub fn fetch_device_info(&self, device: &Device) -> Result<DeviceInfo> {
+        let serial = &device.serial;
+
+        // Batch property read
+        let props_output = self.run_for_device(serial, &["shell", "getprop"]).unwrap_or_default();
+        let props = parse_getprop(&props_output);
+
+        // Battery
+        let battery = self
+            .run_for_device(serial, &["shell", "dumpsys", "battery"])
+            .ok()
+            .and_then(|out| parse_battery(&out));
+
+        // Storage
+        let storage = self
+            .run_for_device(serial, &["shell", "df", "/data"])
+            .ok()
+            .and_then(|out| parse_storage(&out));
+
+        // RAM
+        let ram = self
+            .run_for_device(serial, &["shell", "cat", "/proc/meminfo"])
+            .ok()
+            .and_then(|out| parse_ram(&out));
+
+        // Screen
+        let screen = {
+            let size = self
+                .run_for_device(serial, &["shell", "wm", "size"])
+                .ok()
+                .and_then(|out| parse_screen_size(&out));
+            let density = self
+                .run_for_device(serial, &["shell", "wm", "density"])
+                .ok()
+                .and_then(|out| parse_screen_density(&out));
+            match (size, density) {
+                (Some(res), Some(den)) => Some(ScreenInfo {
+                    resolution: res,
+                    density: den,
+                }),
+                (Some(res), None) => Some(ScreenInfo {
+                    resolution: res,
+                    density: "N/A".to_string(),
+                }),
+                _ => None,
+            }
+        };
+
+        // Wi-Fi
+        let wifi = self
+            .run_for_device(serial, &["shell", "dumpsys", "wifi"])
+            .ok()
+            .and_then(|out| parse_wifi(&out));
+
+        let model = if !props.model.is_empty() {
+            props.model
+        } else {
+            device.display_name()
+        };
+
+        let conn_type = match device.connection_type {
+            ConnectionType::Usb => "USB",
+            ConnectionType::Tcp => "TCP",
+            ConnectionType::Emulator => "Emulator",
+        };
+
+        Ok(DeviceInfo {
+            serial: serial.clone(),
+            model,
+            android_version: if props.android_version.is_empty() {
+                "N/A".to_string()
+            } else {
+                props.android_version
+            },
+            api_level: if props.api_level.is_empty() {
+                "N/A".to_string()
+            } else {
+                props.api_level
+            },
+            state: device.state.to_string(),
+            connection_type: conn_type.to_string(),
+            abi: if props.abi.is_empty() {
+                "N/A".to_string()
+            } else {
+                props.abi
+            },
+            locale: if props.locale.is_empty() {
+                "N/A".to_string()
+            } else {
+                props.locale
+            },
+            battery,
+            storage,
+            ram,
+            screen,
+            wifi,
+        })
     }
 
     pub fn disconnect_device(&self, serial: &str) -> Result<()> {

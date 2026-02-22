@@ -38,6 +38,7 @@ pub struct DevicesPane {
     selected_index: usize,
     last_refresh: std::time::Instant,
     keymap: SectionKeymap,
+    last_selected_serial: Option<String>,
 }
 
 impl DevicesPane {
@@ -47,6 +48,19 @@ impl DevicesPane {
             selected_index: 0,
             last_refresh: std::time::Instant::now(),
             keymap,
+            last_selected_serial: None,
+        }
+    }
+
+    pub fn selected_device(&self) -> Option<&Device> {
+        self.items.get(self.selected_index)
+    }
+
+    fn emit_selection_if_changed(&mut self, commands: &mut Vec<Command>) {
+        let new_serial = self.selected_device().map(|d| d.serial.clone());
+        if new_serial != self.last_selected_serial {
+            self.last_selected_serial = new_serial;
+            commands.push(Command::DeviceSelected(self.selected_device().cloned()));
         }
     }
 }
@@ -55,6 +69,7 @@ const DEVICES_REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_
 
 impl Component for DevicesPane {
     fn update(&mut self, action: &Msg) -> Vec<Command> {
+        let mut commands = Vec::new();
         match action {
             Msg::KeyPress(key) => {
                 let key_seq = vec![*key];
@@ -68,38 +83,40 @@ impl Component for DevicesPane {
                 match action {
                     DeviceAction::Up => {
                         self.selected_index = self.selected_index.saturating_sub(1);
+                        self.emit_selection_if_changed(&mut commands);
                     }
                     DeviceAction::Down => {
                         let count = self.items.len();
                         if count > 0 {
                             self.selected_index = (self.selected_index + 1).min(count - 1);
                         }
+                        self.emit_selection_if_changed(&mut commands);
                     }
                     DeviceAction::Disconnect => {
                         if let Some(device) = self.items.get(self.selected_index) {
                             match device.connection_type {
                                 ConnectionType::Emulator => {
-                                    return vec![Command::KillEmulator(device.serial.clone())];
+                                    commands.push(Command::KillEmulator(device.serial.clone()));
                                 }
                                 ConnectionType::Tcp => {
-                                    return vec![Command::DisconnectDevice(device.serial.clone())];
+                                    commands.push(Command::DisconnectDevice(device.serial.clone()));
                                 }
                                 ConnectionType::Usb => {}
                             }
                         }
                     }
                     DeviceAction::Refresh => {
-                        return vec![Command::RefreshDevices];
+                        commands.push(Command::RefreshDevices);
                     }
                     DeviceAction::OpenEmulators => {
-                        return vec![Command::OpenEmulatorsModal];
+                        commands.push(Command::OpenEmulatorsModal);
                     }
                 }
             }
             Msg::Tick => {
                 if self.last_refresh.elapsed() >= DEVICES_REFRESH_INTERVAL {
                     self.last_refresh = std::time::Instant::now();
-                    return vec![Command::RefreshDevices];
+                    commands.push(Command::RefreshDevices);
                 }
             }
             Msg::DevicesUpdated(devices) => {
@@ -110,9 +127,11 @@ impl Component for DevicesPane {
                 } else {
                     self.selected_index = 0;
                 }
+                self.emit_selection_if_changed(&mut commands);
             }
+            _ => {}
         }
-        Vec::new()
+        commands
     }
 
     fn draw(&self, frame: &mut Frame, area: Rect, ctx: &DrawContext) {
