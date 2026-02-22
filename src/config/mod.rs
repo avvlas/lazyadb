@@ -14,7 +14,7 @@ use lazy_static::lazy_static;
 use serde::Deserialize;
 use tracing::error;
 
-const CONFIG: &str = include_str!("../../.config/config.json5");
+const DEFAULT_CONFIG: &str = include_str!("../../.config/config.toml");
 
 #[derive(Clone, Debug, Deserialize, Default)]
 pub struct AppConfig {
@@ -48,7 +48,7 @@ lazy_static! {
 
 impl Config {
     pub fn new() -> color_eyre::Result<Self, config::ConfigError> {
-        let default_config: Config = json5::from_str(CONFIG).unwrap();
+        let default_config: Config = toml::from_str(DEFAULT_CONFIG).unwrap();
         let data_dir = get_data_dir();
         let config_dir = get_config_dir();
         let mut builder = config::Config::builder()
@@ -56,10 +56,10 @@ impl Config {
             .set_default("config_dir", config_dir.to_str().unwrap())?;
 
         let config_files = [
+            ("config.toml", config::FileFormat::Toml),
             ("config.json5", config::FileFormat::Json5),
             ("config.json", config::FileFormat::Json),
             ("config.yaml", config::FileFormat::Yaml),
-            ("config.toml", config::FileFormat::Toml),
             ("config.ini", config::FileFormat::Ini),
         ];
         let mut found_config = false;

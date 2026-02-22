@@ -14,7 +14,7 @@ pub struct AdbClient {
 
 impl AdbClient {
     pub fn new() -> Result<Self> {
-        let adb_path = std::env::var("DB").unwrap_or_else(|_| "db".to_string());
+        let adb_path = std::env::var("ADB").unwrap_or_else(|_| "adb".to_string());
         let emulator_path = resolve_emulator_path();
 
         let output = Command::new(&adb_path)
