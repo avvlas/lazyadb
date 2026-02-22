@@ -1,4 +1,3 @@
-use crossterm::event::KeyEvent;
 use ratatui::{
     Frame,
     layout::Rect,
@@ -51,46 +50,51 @@ impl EmulatorAction {
 }
 
 impl Component for EmulatorsModal {
-    fn handle_key(&mut self, key: KeyEvent) -> Vec<Command> {
-        let key_seq = vec![key];
-        let Some(action_str) = self.keymap.get(&key_seq) else {
-            return Vec::new();
-        };
-        let Some(action) = EmulatorAction::from_str(action_str) else {
-            return Vec::new();
-        };
-
+    fn update(&mut self, action: &Msg) -> Vec<Command> {
         match action {
-            EmulatorAction::Up => {
-                self.selected_index = self.selected_index.saturating_sub(1);
-            }
-            EmulatorAction::Down => {
-                if !self.items.is_empty() {
-                    self.selected_index = (self.selected_index + 1).min(self.items.len() - 1);
-                }
-            }
-            EmulatorAction::Kill => {
-                if let Some(avd) = self.items.get(self.selected_index)
-                    && let Some(serial) = &avd.running_serial
-                {
-                    return vec![Command::KillEmulator(serial.clone())];
-                }
-            }
-            EmulatorAction::Select => {
-                if let Some(avd) = self.items.get(self.selected_index) {
-                    if avd.is_running() {
-                        return vec![Command::CloseEmulatorsModal, Command::Focus(Pane::Content)];
-                    } else {
-                        return vec![Command::StartEmulator(avd.name.clone())];
+            Msg::KeyPress(key) => {
+                let key_seq = vec![*key];
+                let Some(action_str) = self.keymap.get(&key_seq) else {
+                    return Vec::new();
+                };
+                let Some(action) = EmulatorAction::from_str(action_str) else {
+                    return Vec::new();
+                };
+
+                match action {
+                    EmulatorAction::Up => {
+                        self.selected_index = self.selected_index.saturating_sub(1);
+                    }
+                    EmulatorAction::Down => {
+                        if !self.items.is_empty() {
+                            self.selected_index =
+                                (self.selected_index + 1).min(self.items.len() - 1);
+                        }
+                    }
+                    EmulatorAction::Kill => {
+                        if let Some(avd) = self.items.get(self.selected_index)
+                            && let Some(serial) = &avd.running_serial
+                        {
+                            return vec![Command::KillEmulator(serial.clone())];
+                        }
+                    }
+                    EmulatorAction::Select => {
+                        if let Some(avd) = self.items.get(self.selected_index) {
+                            if avd.is_running() {
+                                return vec![
+                                    Command::CloseEmulatorsModal,
+                                    Command::Focus(Pane::Content),
+                                ];
+                            } else {
+                                return vec![Command::StartEmulator(avd.name.clone())];
+                            }
+                        }
                     }
                 }
+                Vec::new()
             }
+            _ => Vec::new(),
         }
-        Vec::new()
-    }
-
-    fn update(&mut self, _action: &Msg) -> Vec<Command> {
-        Vec::new()
     }
 
     fn draw(&self, frame: &mut Frame, area: Rect, _ctx: &DrawContext) {

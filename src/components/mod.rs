@@ -1,4 +1,3 @@
-use crossterm::event::KeyEvent;
 use ratatui::Frame;
 use ratatui::layout::Rect;
 
@@ -17,10 +16,6 @@ pub struct DrawContext<'a> {
 }
 
 pub trait Component {
-    fn handle_key(&mut self, key: KeyEvent) -> Vec<Command> {
-        let _ = key;
-        Vec::new()
-    }
     fn update(&mut self, action: &Msg) -> Vec<Command>;
     fn draw(&self, frame: &mut Frame, area: Rect, ctx: &DrawContext);
     fn id(&self) -> &str;

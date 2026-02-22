@@ -1,4 +1,3 @@
-use crossterm::event::KeyEvent;
 use ratatui::{
     Frame,
     layout::Rect,
@@ -55,50 +54,48 @@ impl DevicesPane {
 const DEVICES_REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
 
 impl Component for DevicesPane {
-    fn handle_key(&mut self, key: KeyEvent) -> Vec<Command> {
-        let key_seq = vec![key];
-        let Some(action_str) = self.keymap.get(&key_seq) else {
-            return Vec::new();
-        };
-        let Some(action) = DeviceAction::from_str(action_str) else {
-            return Vec::new();
-        };
-
+    fn update(&mut self, action: &Msg) -> Vec<Command> {
         match action {
-            DeviceAction::Up => {
-                self.selected_index = self.selected_index.saturating_sub(1);
-            }
-            DeviceAction::Down => {
-                let count = self.items.len();
-                if count > 0 {
-                    self.selected_index = (self.selected_index + 1).min(count - 1);
-                }
-            }
-            DeviceAction::Disconnect => {
-                if let Some(device) = self.items.get(self.selected_index) {
-                    match device.connection_type {
-                        ConnectionType::Emulator => {
-                            return vec![Command::KillEmulator(device.serial.clone())];
+            Msg::KeyPress(key) => {
+                let key_seq = vec![*key];
+                let Some(action_str) = self.keymap.get(&key_seq) else {
+                    return Vec::new();
+                };
+                let Some(action) = DeviceAction::from_str(action_str) else {
+                    return Vec::new();
+                };
+
+                match action {
+                    DeviceAction::Up => {
+                        self.selected_index = self.selected_index.saturating_sub(1);
+                    }
+                    DeviceAction::Down => {
+                        let count = self.items.len();
+                        if count > 0 {
+                            self.selected_index = (self.selected_index + 1).min(count - 1);
                         }
-                        ConnectionType::Tcp => {
-                            return vec![Command::DisconnectDevice(device.serial.clone())];
+                    }
+                    DeviceAction::Disconnect => {
+                        if let Some(device) = self.items.get(self.selected_index) {
+                            match device.connection_type {
+                                ConnectionType::Emulator => {
+                                    return vec![Command::KillEmulator(device.serial.clone())];
+                                }
+                                ConnectionType::Tcp => {
+                                    return vec![Command::DisconnectDevice(device.serial.clone())];
+                                }
+                                ConnectionType::Usb => {}
+                            }
                         }
-                        ConnectionType::Usb => {}
+                    }
+                    DeviceAction::Refresh => {
+                        return vec![Command::RefreshDevices];
+                    }
+                    DeviceAction::OpenEmulators => {
+                        return vec![Command::OpenEmulatorsModal];
                     }
                 }
             }
-            DeviceAction::Refresh => {
-                return vec![Command::RefreshDevices];
-            }
-            DeviceAction::OpenEmulators => {
-                return vec![Command::OpenEmulatorsModal];
-            }
-        }
-        Vec::new()
-    }
-
-    fn update(&mut self, action: &Msg) -> Vec<Command> {
-        match action {
             Msg::Tick => {
                 if self.last_refresh.elapsed() >= DEVICES_REFRESH_INTERVAL {
                     self.last_refresh = std::time::Instant::now();

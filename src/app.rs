@@ -152,7 +152,7 @@ impl App {
                             _ => {}
                         }
                     }
-                    let commands = help.handle_key(key);
+                    let commands = help.update(&Msg::KeyPress(key));
                     self.execute_commands(commands).ok();
                     return;
                 }
@@ -176,7 +176,7 @@ impl App {
                         }
                     }
                     // Forward to modal's handle_key
-                    let commands = emulators.handle_key(key);
+                    let commands = emulators.update(&Msg::KeyPress(key));
                     self.execute_commands(commands).ok();
                     return;
                 }
@@ -190,7 +190,7 @@ impl App {
         }
 
         // Forward to focused component
-        let commands = self.focused_pane().handle_key(key);
+        let commands = self.focused_pane().update(&Msg::KeyPress(key));
 
         self.execute_commands(commands).ok();
     }
