@@ -3,26 +3,24 @@ use std::collections::HashMap;
 use ratatui::style::{Color, Modifier, Style};
 use serde::{Deserialize, de::Deserializer};
 
-use crate::components::panes::Pane;
-
 #[derive(Clone, Debug, Default)]
-pub struct Styles(pub HashMap<Pane, HashMap<String, Style>>);
+pub struct Styles(pub HashMap<String, HashMap<String, Style>>);
 
 impl<'de> Deserialize<'de> for Styles {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let parsed_map = HashMap::<Pane, HashMap<String, String>>::deserialize(deserializer)?;
+        let parsed_map = HashMap::<String, HashMap<String, String>>::deserialize(deserializer)?;
 
         let styles = parsed_map
             .into_iter()
-            .map(|(panel, inner_map)| {
+            .map(|(section, inner_map)| {
                 let converted_inner_map = inner_map
                     .into_iter()
-                    .map(|(str, style)| (str, parse_style(&style)))
+                    .map(|(key, style)| (key, parse_style(&style)))
                     .collect();
-                (panel, converted_inner_map)
+                (section, converted_inner_map)
             })
             .collect();
 

@@ -11,5 +11,4 @@ pub enum Command {
     DisconnectDevice(String),
 
     Focus(Pane),
-    CycleFocus,
 }

@@ -1,47 +1,31 @@
 {
   "keybindings": {
+    "Global": {
+      "<q>": "Quit",
+      "<Ctrl-d>": "Quit",
+      "<Ctrl-c>": "Quit",
+      "<Tab>": "CycleFocus",
+      "<Backtab>": "CycleFocusBackwards",
+      "<?>": "ToggleHelp",
+      "<Esc>": "CloseModal"
+    },
     "DeviceList": {
-      "<q>": "Quit",
-      "<Ctrl-d>": "Quit",
-      "<Ctrl-c>": "Quit",
-      "<Ctrl-z>": "Suspend",
-      "<j>": "DeviceListDown",
-      "<k>": "DeviceListUp",
-      "<Down>": "DeviceListDown",
-      "<Up>": "DeviceListUp",
-      "<x>": "DisconnectDevice",
-      "<r>": "RefreshDevices",
-      "<Tab>": "CycleFocus",
-      "<Backtab>": "CycleFocusBackwards",
-      "<e>": "OpenEmulators",
-      "<?>": "ToggleHelp",
-      "<Esc>": "CloseModal"
+      "<j>": "Down",
+      "<k>": "Up",
+      "<Down>": "Down",
+      "<Up>": "Up",
+      "<x>": "Disconnect",
+      "<r>": "Refresh",
+      "<e>": "OpenEmulators"
     },
-    "Emulators": {
-      "<q>": "Quit",
-      "<Ctrl-d>": "Quit",
-      "<Ctrl-c>": "Quit",
-      "<Ctrl-z>": "Suspend",
-      "<j>": "EmulatorListDown",
-      "<k>": "EmulatorListUp",
-      "<Down>": "EmulatorListDown",
-      "<Up>": "EmulatorListUp",
-      "<x>": "KillEmulator",
-      "<Enter>": "EmulatorSelect",
-      "<Tab>": "CycleFocus",
-      "<Backtab>": "CycleFocusBackwards",
-      "<?>": "ToggleHelp",
-      "<Esc>": "CloseModal"
+    "EmulatorsModal": {
+      "<j>": "Down",
+      "<k>": "Up",
+      "<Down>": "Down",
+      "<Up>": "Up",
+      "<x>": "Kill",
+      "<Enter>": "Select"
     },
-    "Content": {
-      "<q>": "Quit",
-      "<Ctrl-d>": "Quit",
-      "<Ctrl-c>": "Quit",
-      "<Ctrl-z>": "Suspend",
-      "<Tab>": "CycleFocus",
-      "<Backtab>": "CycleFocusBackwards",
-      "<?>": "ToggleHelp",
-      "<Esc>": "CloseModal"
-    }
+    "Content": {}
   }
 }

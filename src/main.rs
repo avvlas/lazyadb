@@ -1,9 +1,9 @@
-mod action;
 mod adb;
 mod app;
 mod command;
 mod components;
 mod config;
+mod msg;
 mod tui;
 
 use color_eyre::Result;

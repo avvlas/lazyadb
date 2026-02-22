@@ -1,3 +1,4 @@
+use crossterm::event::KeyEvent;
 use ratatui::{
     Frame,
     layout::Rect,
@@ -9,47 +10,71 @@ use ratatui::{
 use crate::adb::device::{ConnectionType, Device, DeviceState};
 use crate::command::Command;
 use crate::components::{DrawContext, panes::Pane};
-use crate::{action::Action, components::Component};
+use crate::config::keymap::SectionKeymap;
+use crate::{components::Component, msg::Msg};
 
-pub struct DevicesPane {
-    pub items: Vec<Device>,
-    pub selected_index: usize,
+enum DeviceAction {
+    Up,
+    Down,
+    Disconnect,
+    Refresh,
+    OpenEmulators,
 }
 
-impl DevicesPane {
-    pub fn new(items: Vec<Device>) -> Self {
-        Self {
-            items,
-            selected_index: 0,
+impl DeviceAction {
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "Up" => Some(Self::Up),
+            "Down" => Some(Self::Down),
+            "Disconnect" => Some(Self::Disconnect),
+            "Refresh" => Some(Self::Refresh),
+            "OpenEmulators" => Some(Self::OpenEmulators),
+            _ => None,
         }
     }
 }
 
+pub struct DevicesPane {
+    pub items: Vec<Device>,
+    selected_index: usize,
+    last_refresh: std::time::Instant,
+    keymap: SectionKeymap,
+}
+
+impl DevicesPane {
+    pub fn new(items: Vec<Device>, keymap: SectionKeymap) -> Self {
+        Self {
+            items,
+            selected_index: 0,
+            last_refresh: std::time::Instant::now(),
+            keymap,
+        }
+    }
+}
+
+const DEVICES_REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
+
 impl Component for DevicesPane {
-    fn update(&mut self, action: &Action) -> Vec<Command> {
+    fn handle_key(&mut self, key: KeyEvent) -> Vec<Command> {
+        let key_seq = vec![key];
+        let Some(action_str) = self.keymap.get(&key_seq) else {
+            return Vec::new();
+        };
+        let Some(action) = DeviceAction::from_str(action_str) else {
+            return Vec::new();
+        };
+
         match action {
-            Action::RefreshDevices => {
-                return vec![Command::RefreshDevices];
-            }
-            Action::DevicesUpdated(devices) => {
-                self.items = devices.clone();
-                let count = self.items.len();
-                if count > 0 {
-                    self.selected_index = self.selected_index.min(count - 1);
-                } else {
-                    self.selected_index = 0;
-                }
-            }
-            Action::DeviceListUp => {
+            DeviceAction::Up => {
                 self.selected_index = self.selected_index.saturating_sub(1);
             }
-            Action::DeviceListDown => {
+            DeviceAction::Down => {
                 let count = self.items.len();
                 if count > 0 {
                     self.selected_index = (self.selected_index + 1).min(count - 1);
                 }
             }
-            Action::DisconnectDevice => {
+            DeviceAction::Disconnect => {
                 if let Some(device) = self.items.get(self.selected_index) {
                     match device.connection_type {
                         ConnectionType::Emulator => {
@@ -62,8 +87,32 @@ impl Component for DevicesPane {
                     }
                 }
             }
-            Action::OpenEmulators => {
+            DeviceAction::Refresh => {
+                return vec![Command::RefreshDevices];
+            }
+            DeviceAction::OpenEmulators => {
                 return vec![Command::OpenEmulatorsModal];
+            }
+        }
+        Vec::new()
+    }
+
+    fn update(&mut self, action: &Msg) -> Vec<Command> {
+        match action {
+            Msg::Tick => {
+                if self.last_refresh.elapsed() >= DEVICES_REFRESH_INTERVAL {
+                    self.last_refresh = std::time::Instant::now();
+                    return vec![Command::RefreshDevices];
+                }
+            }
+            Msg::DevicesUpdated(devices) => {
+                self.items = devices.clone();
+                let count = self.items.len();
+                if count > 0 {
+                    self.selected_index = self.selected_index.min(count - 1);
+                } else {
+                    self.selected_index = 0;
+                }
             }
             _ => {}
         }

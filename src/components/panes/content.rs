@@ -5,11 +5,11 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::{action::Action, components::Component};
 use crate::{
     command::Command,
     components::{DrawContext, panes::Pane},
 };
+use crate::{components::Component, msg::Msg};
 
 pub struct ContentPane;
 
@@ -20,7 +20,7 @@ impl ContentPane {
 }
 
 impl Component for ContentPane {
-    fn update(&mut self, _action: &Action) -> Vec<Command> {
+    fn update(&mut self, _action: &Msg) -> Vec<Command> {
         Vec::new()
     }
 

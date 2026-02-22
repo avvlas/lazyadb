@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::time::Instant;
 
 use color_eyre::Result;
@@ -14,7 +13,6 @@ use tokio::sync::mpsc;
 use tracing::debug;
 
 use crate::{
-    action::Action,
     adb::client::AdbClient,
     command::Command,
     components::{
@@ -23,12 +21,13 @@ use crate::{
         panes::{Pane, content::ContentPane, devices::DevicesPane},
     },
     config::Config,
+    msg::Msg,
     tui::{Event, Tui},
 };
 
 pub struct App {
     running: bool,
-    should_suspend: bool,
+
     focus: Pane,
     config: Config,
     adb: AdbClient,
@@ -39,8 +38,29 @@ pub struct App {
 
     modal: Option<Modal>,
 
-    action_tx: mpsc::UnboundedSender<Action>,
-    action_rx: mpsc::UnboundedReceiver<Action>,
+    action_tx: mpsc::UnboundedSender<Msg>,
+    action_rx: mpsc::UnboundedReceiver<Msg>,
+}
+
+enum GlobalAction {
+    Quit,
+    CycleFocus,
+    CycleFocusBackwards,
+    ToggleHelp,
+    CloseModal,
+}
+
+impl GlobalAction {
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "Quit" => Some(Self::Quit),
+            "CycleFocus" => Some(Self::CycleFocus),
+            "CycleFocusBackwards" => Some(Self::CycleFocusBackwards),
+            "ToggleHelp" => Some(Self::ToggleHelp),
+            "CloseModal" => Some(Self::CloseModal),
+            _ => None,
+        }
+    }
 }
 
 impl App {
@@ -49,23 +69,25 @@ impl App {
         let adb = AdbClient::new()?;
         let devices = adb.devices().unwrap_or_default();
 
+        let device_keymap = config.keybindings.section_keymap("DeviceList");
+
         let (action_tx, action_rx) = mpsc::unbounded_channel();
 
         Ok(Self {
             running: true,
-            should_suspend: false,
+
             focus: Pane::DeviceList,
-            config,
-            adb,
+            config: config,
+            adb: adb,
             last_refresh: Instant::now(),
 
-            devices: DevicesPane::new(devices),
+            devices: DevicesPane::new(devices, device_keymap),
             content: ContentPane::new(),
 
             modal: None,
 
-            action_tx,
-            action_rx,
+            action_tx: action_tx,
+            action_rx: action_rx,
         })
     }
 
@@ -75,15 +97,9 @@ impl App {
 
         loop {
             self.handle_events(&mut tui).await?;
-            self.handle_actions(&mut tui)?;
+            self.handle_actions()?;
 
-            if self.should_suspend {
-                debug!("Suspending app");
-                tui.suspend()?;
-                self.action_tx.send(Action::Resume)?;
-                self.action_tx.send(Action::ClearScreen)?;
-                tui.enter()?;
-            } else if !self.running {
+            if !self.running {
                 tui.stop()?;
                 break;
             }
@@ -97,120 +113,128 @@ impl App {
         let Some(event) = tui.next_event().await else {
             return Ok(());
         };
-        let action_tx = self.action_tx.clone();
         match event {
-            Event::Quit => action_tx.send(Action::Quit)?,
-            Event::Tick => action_tx.send(Action::Tick)?,
-            Event::Render => action_tx.send(Action::Render)?,
-            Event::Resize(x, y) => action_tx.send(Action::Resize(x, y))?,
+            Event::Init => {}
+            Event::Tick => self.action_tx.send(Msg::Tick)?,
+            Event::Resize(w, h) => self.handle_resize(tui, w, h)?,
+            Event::Render => self.render(tui)?,
             Event::Key(key) => self.handle_key(key),
-            _ => {}
+            Event::Error => {}
+            Event::FocusGained => {}
+            Event::FocusLost => {}
+            Event::Paste(_) => {}
+            Event::Mouse(_) => {}
         }
         Ok(())
     }
 
-    fn handle_key(&self, key: KeyEvent) {
+    fn handle_key(&mut self, key: KeyEvent) {
         debug!("Handle key: {}", key.code);
 
-        if let Some(ref modal) = self.modal {
-            match modal {
-                // Help modal: only allow closing
-                Modal::Help(_) => {
-                    if let Some(Action::CloseModal | Action::OpenHelp) = self.lookup_action(key) {
-                        let _ = self.action_tx.send(Action::CloseModal);
-                    }
-                    return;
-                }
+        let global_action = self.lookup_global_action(key);
 
-                // Emulators modal: route keys through Emulators keybindings
-                Modal::Emulators(_) => {
-                    if let Some(action) = self.lookup_emulator_action(key) {
+        // If a modal is open, handle it specially
+        if let Some(ref mut modal) = self.modal {
+            match modal {
+                Modal::Help(help) => {
+                    // Help modal: only allow closing via global keys
+                    if let Some(action) = global_action {
                         match action {
-                            Action::EmulatorListUp
-                            | Action::EmulatorListDown
-                            | Action::EmulatorSelect
-                            | Action::KillEmulator
-                            | Action::CloseModal => {
-                                let _ = self.action_tx.send(action);
+                            GlobalAction::CloseModal | GlobalAction::ToggleHelp => {
+                                self.modal = None;
+                                return;
+                            }
+                            GlobalAction::Quit => {
+                                self.running = false;
+                                return;
                             }
                             _ => {}
                         }
                     }
+                    let commands = help.handle_key(key);
+                    self.execute_commands(commands).ok();
+                    return;
+                }
+                Modal::Emulators(emulators) => {
+                    // Check global keys first
+                    if let Some(action) = global_action {
+                        match action {
+                            GlobalAction::CloseModal => {
+                                self.modal = None;
+                                return;
+                            }
+                            GlobalAction::ToggleHelp => {
+                                self.modal = Some(Modal::Help(HelpModal::new()));
+                                return;
+                            }
+                            GlobalAction::Quit => {
+                                self.running = false;
+                                return;
+                            }
+                            _ => {}
+                        }
+                    }
+                    // Forward to modal's handle_key
+                    let commands = emulators.handle_key(key);
+                    self.execute_commands(commands).ok();
                     return;
                 }
             }
         }
 
-        if let Some(action) = self.lookup_action(key) {
-            let _ = self.action_tx.send(action);
-        }
-    }
-
-    fn lookup_action(&self, key: KeyEvent) -> Option<Action> {
-        let key_seq = vec![key];
-        self.config
-            .keybindings
-            .0
-            .get(&self.focus)
-            .and_then(|bindings: &HashMap<Vec<KeyEvent>, Action>| bindings.get(&key_seq))
-            .cloned()
-    }
-
-    fn lookup_emulator_action(&self, key: KeyEvent) -> Option<Action> {
-        let key_seq = vec![key];
-        self.config
-            .keybindings
-            .0
-            .get(&Pane::Emulators)
-            .and_then(|bindings: &HashMap<Vec<KeyEvent>, Action>| bindings.get(&key_seq))
-            .cloned()
-    }
-
-    fn handle_actions(&mut self, tui: &mut Tui) -> Result<()> {
-        while let Ok(action) = self.action_rx.try_recv() {
-            self.handle_action(action, tui)?;
-        }
-        Ok(())
-    }
-
-    fn handle_action(&mut self, action: Action, tui: &mut Tui) -> Result<()> {
-        if action != Action::Tick && action != Action::Render {
-            debug!("Handling action: {action:?}");
+        // Check global keybindings
+        if let Some(action) = global_action {
+            self.handle_global_action(action);
+            return;
         }
 
+        // Forward to focused component
+        let commands = self.focused_pane().handle_key(key);
+
+        self.execute_commands(commands).ok();
+    }
+
+    fn handle_global_action(&mut self, action: GlobalAction) {
         match action {
-            Action::Tick => {
-                if self.last_refresh.elapsed() >= std::time::Duration::from_secs(2) {
-                    self.action_tx.send(Action::RefreshDevices)?;
-                }
+            GlobalAction::Quit => {
+                self.running = false;
             }
-            Action::Quit => self.running = false,
-            Action::Suspend => self.should_suspend = true,
-            Action::Resume => self.should_suspend = false,
-            Action::ClearScreen => tui.terminal.clear()?,
-            Action::Resize(w, h) => self.handle_resize(tui, w, h)?,
-            Action::Render => self.render(tui)?,
-
-            Action::CycleFocus => {
+            GlobalAction::CycleFocus => {
                 self.focus = self.focus.next();
             }
-            Action::CycleFocusBackwards => {
+            GlobalAction::CycleFocusBackwards => {
                 self.focus = self.focus.prev();
             }
-
-            Action::OpenHelp => self.modal = Some(Modal::Help(HelpModal::new())),
-            Action::CloseModal => self.modal = None,
-            _ => {}
+            GlobalAction::ToggleHelp => {
+                self.modal = Some(Modal::Help(HelpModal::new()));
+            }
+            GlobalAction::CloseModal => {
+                self.modal = None;
+            }
         }
+    }
 
-        // Delegate to component update methods and collect commands
-        let mut commands = Vec::new();
-        for component in self.components() {
-            commands.extend(component.update(&action));
+    fn lookup_global_action(&self, key: KeyEvent) -> Option<GlobalAction> {
+        self.config
+            .keybindings
+            .lookup_global(&key)
+            .and_then(GlobalAction::from_str)
+    }
+
+    fn handle_actions(&mut self) -> Result<()> {
+        while let Ok(action) = self.action_rx.try_recv() {
+            if !matches!(action, Msg::Tick) {
+                debug!("Handling action: {action:?}");
+            }
+
+            // Delegate to component update methods and collect commands
+            let mut commands = Vec::new();
+            for component in self.components() {
+                commands.extend(component.update(&action));
+            }
+
+            self.execute_commands(commands)?;
         }
-
-        self.execute_commands(commands)?;
-
         Ok(())
     }
 
@@ -227,6 +251,13 @@ impl App {
         components
     }
 
+    fn focused_pane(&mut self) -> &mut dyn Component {
+        match self.focus {
+            Pane::DeviceList => &mut self.devices,
+            Pane::Content => &mut self.content,
+        }
+    }
+
     fn execute_commands(&mut self, commands: Vec<Command>) -> Result<()> {
         for cmd in commands {
             match cmd {
@@ -238,7 +269,8 @@ impl App {
                 }
                 Command::OpenEmulatorsModal => {
                     let emulators = self.adb.avds_with_status(&self.devices.items);
-                    self.modal = Some(Modal::Emulators(EmulatorsModal::new(emulators)))
+                    let keymap = self.config.keybindings.section_keymap("EmulatorsModal");
+                    self.modal = Some(Modal::Emulators(EmulatorsModal::new(emulators, keymap)))
                 }
                 Command::CloseEmulatorsModal => self.modal = None,
                 Command::DisconnectDevice(serial) => {
@@ -247,12 +279,9 @@ impl App {
                 Command::Focus(panel) => {
                     self.focus = panel;
                 }
-                Command::CycleFocus => {
-                    self.focus = self.focus.next();
-                }
                 Command::RefreshDevices => {
                     if let Ok(devices) = self.adb.devices() {
-                        self.action_tx.send(Action::DevicesUpdated(devices))?;
+                        self.action_tx.send(Msg::DevicesUpdated(devices))?;
                         self.last_refresh = Instant::now();
                     }
                 }

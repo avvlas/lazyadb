@@ -1,3 +1,4 @@
+use crossterm::event::KeyEvent;
 use ratatui::{
     Frame,
     layout::Rect,
@@ -7,46 +8,75 @@ use ratatui::{
 };
 
 use crate::{
-    action::Action,
     adb::emulator::Avd,
     command::Command,
-    components::modals::Modal,
     components::{Component, DrawContext, modals::centered_rect, panes::Pane},
+    config::keymap::SectionKeymap,
+    msg::Msg,
 };
 
 pub struct EmulatorsModal {
-    pub items: Vec<Avd>,
-    pub selected_index: usize,
+    items: Vec<Avd>,
+    selected_index: usize,
+    keymap: SectionKeymap,
 }
 
 impl EmulatorsModal {
-    pub fn new(items: Vec<Avd>) -> Self {
+    pub fn new(items: Vec<Avd>, keymap: SectionKeymap) -> Self {
         Self {
             items,
             selected_index: 0,
+            keymap,
+        }
+    }
+}
+
+enum EmulatorAction {
+    Up,
+    Down,
+    Select,
+    Kill,
+}
+
+impl EmulatorAction {
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "Up" => Some(Self::Up),
+            "Down" => Some(Self::Down),
+            "Select" => Some(Self::Select),
+            "Kill" => Some(Self::Kill),
+            _ => None,
         }
     }
 }
 
 impl Component for EmulatorsModal {
-    fn update(&mut self, action: &Action) -> Vec<Command> {
+    fn handle_key(&mut self, key: KeyEvent) -> Vec<Command> {
+        let key_seq = vec![key];
+        let Some(action_str) = self.keymap.get(&key_seq) else {
+            return Vec::new();
+        };
+        let Some(action) = EmulatorAction::from_str(action_str) else {
+            return Vec::new();
+        };
+
         match action {
-            Action::EmulatorListUp => {
+            EmulatorAction::Up => {
                 self.selected_index = self.selected_index.saturating_sub(1);
             }
-            Action::EmulatorListDown => {
+            EmulatorAction::Down => {
                 if !self.items.is_empty() {
                     self.selected_index = (self.selected_index + 1).min(self.items.len() - 1);
                 }
             }
-            Action::KillEmulator => {
+            EmulatorAction::Kill => {
                 if let Some(avd) = self.items.get(self.selected_index)
                     && let Some(serial) = &avd.running_serial
                 {
                     return vec![Command::KillEmulator(serial.clone())];
                 }
             }
-            Action::EmulatorSelect => {
+            EmulatorAction::Select => {
                 if let Some(avd) = self.items.get(self.selected_index) {
                     if avd.is_running() {
                         return vec![Command::CloseEmulatorsModal, Command::Focus(Pane::Content)];
@@ -55,8 +85,11 @@ impl Component for EmulatorsModal {
                     }
                 }
             }
-            _ => {}
         }
+        Vec::new()
+    }
+
+    fn update(&mut self, _action: &Msg) -> Vec<Command> {
         Vec::new()
     }
 

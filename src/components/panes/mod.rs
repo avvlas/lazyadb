@@ -1,25 +1,21 @@
-use serde::{Deserialize, Serialize};
-
 pub mod content;
 pub mod devices;
 
-#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum Pane {
     #[default]
     DeviceList = 0,
-    Emulators = 1,
-    Content = 2,
+    Content = 1,
 }
 
-const PANE_COUNT: u8 = 3;
+const PANE_COUNT: u8 = 2;
 
 impl Pane {
     fn from_index(i: u8) -> Self {
         match i {
             0 => Pane::DeviceList,
-            1 => Pane::Emulators,
-            2 => Pane::Content,
+            1 => Pane::Content,
             _ => unreachable!(),
         }
     }

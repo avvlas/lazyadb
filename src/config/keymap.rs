@@ -4,77 +4,67 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{Deserialize, de::Deserializer};
 use tracing::debug;
 
-use crate::{action::Action, components::panes::Pane};
+pub type SectionKeymap = HashMap<Vec<KeyEvent>, String>;
 
 #[derive(Clone, Debug, Default)]
-pub struct KeyBindings(pub HashMap<Pane, HashMap<Vec<KeyEvent>, Action>>);
+pub struct KeyBindings {
+    pub global: SectionKeymap,
+    pub sections: HashMap<String, SectionKeymap>,
+}
 
 impl<'de> Deserialize<'de> for KeyBindings {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let parsed_map = HashMap::<Pane, HashMap<String, String>>::deserialize(deserializer)?;
+        let mut parsed_map = HashMap::<String, HashMap<String, String>>::deserialize(deserializer)?;
 
-        let keybindings = parsed_map
+        let global = parsed_map
+            .remove("Global")
+            .unwrap_or_default()
             .into_iter()
-            .filter_map(|(panel, inner_map)| {
-                let context = panel_to_context(&panel);
-                let converted: HashMap<Vec<KeyEvent>, Action> = inner_map
-                    .into_iter()
-                    .filter_map(|(key_str, action_name)| {
-                        let keys = parse_key_sequence(&key_str).ok()?;
-                        let action = semantic_to_action(context, &action_name)?;
-                        Some((keys, action))
-                    })
-                    .collect();
-                if converted.is_empty() {
-                    None
-                } else {
-                    Some((panel, converted))
-                }
+            .filter_map(|(key_str, action_name)| {
+                let keys = parse_key_sequence(&key_str).ok()?;
+                Some((keys, action_name))
             })
             .collect();
 
-        debug!("Keybinginds: {keybindings:?}");
-        Ok(KeyBindings(keybindings))
+        let sections = parsed_map
+            .into_iter()
+            .map(|(section, inner_map)| {
+                let converted: SectionKeymap = inner_map
+                    .into_iter()
+                    .filter_map(|(key_str, action_name)| {
+                        let keys = parse_key_sequence(&key_str).ok()?;
+                        Some((keys, action_name))
+                    })
+                    .collect();
+                (section, converted)
+            })
+            .collect();
+
+        let kb = KeyBindings { global, sections };
+        debug!("Keybindings: {kb:?}");
+        Ok(kb)
     }
 }
 
-fn panel_to_context(panel: &Pane) -> &'static str {
-    match panel {
-        Pane::DeviceList => "devices",
-        Pane::Emulators => "emulators",
-        Pane::Content => "content",
+impl KeyBindings {
+    pub fn lookup_global(&self, key: &KeyEvent) -> Option<&str> {
+        let key_seq = vec![*key];
+        self.global.get(&key_seq).map(|s| s.as_str())
     }
-}
 
-/// Convert a (context, action_name) pair into a typed Action.
-/// Returns None for unknown actions (silently ignored).
-fn semantic_to_action(context: &str, action: &str) -> Option<Action> {
-    match (context, action) {
-        // Global (duplicated per-context in config, matched with wildcard)
-        (_, "Quit") => Some(Action::Quit),
-        (_, "Suspend") => Some(Action::Suspend),
-        (_, "CycleFocus") => Some(Action::CycleFocus),
-        (_, "CycleFocusBackwards") => Some(Action::CycleFocusBackwards),
-        (_, "ToggleHelp") => Some(Action::OpenHelp),
-        (_, "CloseModal") => Some(Action::CloseModal),
-        (_, "RefreshDevices") => Some(Action::RefreshDevices),
+    pub fn lookup_section(&self, section: &str, key: &KeyEvent) -> Option<&str> {
+        let key_seq = vec![*key];
+        self.sections
+            .get(section)
+            .and_then(|bindings| bindings.get(&key_seq))
+            .map(|s| s.as_str())
+    }
 
-        // Device list
-        ("devices", "DeviceListUp") => Some(Action::DeviceListUp),
-        ("devices", "DeviceListDown") => Some(Action::DeviceListDown),
-        ("devices", "DisconnectDevice") => Some(Action::DisconnectDevice),
-        ("devices", "OpenEmulators") => Some(Action::OpenEmulators),
-
-        // Emulators
-        ("emulators", "EmulatorListUp") => Some(Action::EmulatorListUp),
-        ("emulators", "EmulatorListDown") => Some(Action::EmulatorListDown),
-        ("emulators", "EmulatorSelect") => Some(Action::EmulatorSelect),
-        ("emulators", "KillEmulator") => Some(Action::KillEmulator),
-
-        _ => None,
+    pub fn section_keymap(&self, section: &str) -> SectionKeymap {
+        self.sections.get(section).cloned().unwrap_or_default()
     }
 }
 
@@ -222,7 +212,7 @@ fn key_event_to_string(key_event: &KeyEvent) -> String {
     key
 }
 
-fn parse_key_sequence(raw: &str) -> Result<Vec<KeyEvent>, String> {
+pub fn parse_key_sequence(raw: &str) -> Result<Vec<KeyEvent>, String> {
     if raw.chars().filter(|c| *c == '>').count() != raw.chars().filter(|c| *c == '<').count() {
         return Err(format!("Unable to parse `{}`", raw));
     }
@@ -337,32 +327,24 @@ mod tests {
     }
 
     #[test]
-    fn test_semantic_to_action() {
-        assert_eq!(semantic_to_action("devices", "Quit"), Some(Action::Quit));
+    fn test_lookup_global() {
+        let c = super::super::Config::new().unwrap();
         assert_eq!(
-            semantic_to_action("devices", "DeviceListUp"),
-            Some(Action::DeviceListUp)
+            c.keybindings
+                .lookup_global(&KeyEvent::new(KeyCode::Char('q'), KeyModifiers::empty())),
+            Some("Quit")
         );
-        assert_eq!(
-            semantic_to_action("emulators", "KillEmulator"),
-            Some(Action::KillEmulator)
-        );
-        assert_eq!(semantic_to_action("devices", "KillEmulator"), None);
-        assert_eq!(semantic_to_action("devices", "nonexistent"), None);
     }
 
     #[test]
-    fn test_config() -> color_eyre::Result<()> {
-        let c = super::super::Config::new()?;
+    fn test_lookup_section() {
+        let c = super::super::Config::new().unwrap();
         assert_eq!(
-            c.keybindings
-                .0
-                .get(&Pane::DeviceList)
-                .unwrap()
-                .get(&parse_key_sequence("<q>").unwrap_or_default())
-                .unwrap(),
-            &Action::Quit
+            c.keybindings.lookup_section(
+                "DeviceList",
+                &KeyEvent::new(KeyCode::Char('j'), KeyModifiers::empty())
+            ),
+            Some("Down")
         );
-        Ok(())
     }
 }

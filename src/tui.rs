@@ -28,9 +28,7 @@ use tracing::error;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Event {
     Init,
-    Quit,
     Error,
-    Closed,
     Tick,
     Render,
     FocusGained,
@@ -132,7 +130,7 @@ impl Tui {
                         CrosstermEvent::FocusLost => Event::FocusLost,
                         CrosstermEvent::FocusGained => Event::FocusGained,
                         CrosstermEvent::Paste(s) => Event::Paste(s),
-                        _ => continue, // ignore other events
+                        CrosstermEvent::Key(_) => continue, // ignore other events
                     }
                     Some(Err(_)) => Event::Error,
                     None => break, // the event stream has stopped and will not produce any more events

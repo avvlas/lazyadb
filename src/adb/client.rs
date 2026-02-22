@@ -184,7 +184,11 @@ impl AdbClient {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(eyre!("'adb disconnect {}' failed: {}", serial, stderr.trim()));
+            return Err(eyre!(
+                "'adb disconnect {}' failed: {}",
+                serial,
+                stderr.trim()
+            ));
         }
 
         Ok(())

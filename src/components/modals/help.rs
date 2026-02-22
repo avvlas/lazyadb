@@ -6,9 +6,9 @@ use ratatui::{
 };
 
 use crate::{
-    action::Action,
     command::Command,
     components::{Component, DrawContext, modals::centered_rect},
+    msg::Msg,
 };
 
 pub struct HelpModal;
@@ -20,7 +20,7 @@ impl HelpModal {
 }
 
 impl Component for HelpModal {
-    fn update(&mut self, _action: &Action) -> Vec<Command> {
+    fn update(&mut self, _action: &Msg) -> Vec<Command> {
         Vec::new()
     }
 

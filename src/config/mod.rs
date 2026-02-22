@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-mod keymap;
+pub mod keymap;
 pub mod logging;
 mod styles;
 
@@ -78,16 +78,22 @@ impl Config {
 
         let mut cfg: Self = builder.build()?.try_deserialize()?;
 
-        for (panel, default_bindings) in default_config.keybindings.0.iter() {
-            let user_bindings = cfg.keybindings.0.entry(*panel).or_default();
-            for (key, cmd) in default_bindings.iter() {
+        for (key, action) in default_config.keybindings.global.iter() {
+            cfg.keybindings
+                .global
+                .entry(key.clone())
+                .or_insert_with(|| action.clone());
+        }
+        for (section, default_bindings) in default_config.keybindings.sections.iter() {
+            let user_bindings = cfg.keybindings.sections.entry(section.clone()).or_default();
+            for (key, action) in default_bindings.iter() {
                 user_bindings
                     .entry(key.clone())
-                    .or_insert_with(|| cmd.clone());
+                    .or_insert_with(|| action.clone());
             }
         }
-        for (panel, default_styles) in default_config.styles.0.iter() {
-            let user_styles = cfg.styles.0.entry(*panel).or_default();
+        for (section, default_styles) in default_config.styles.0.iter() {
+            let user_styles = cfg.styles.0.entry(section.clone()).or_default();
             for (style_key, style) in default_styles.iter() {
                 user_styles.entry(style_key.clone()).or_insert(*style);
             }
