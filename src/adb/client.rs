@@ -7,23 +7,6 @@ use tracing::info;
 use super::device::{ConnectionType, Device, parse_device_list};
 use super::emulator::{Avd, parse_avd_list};
 
-fn resolve_emulator_path() -> String {
-    // 1. Try ANDROID_HOME or ANDROID_SDK_ROOT
-    let sdk_dir = std::env::var("ANDROID_HOME")
-        .or_else(|_| std::env::var("ANDROID_SDK_ROOT"))
-        .ok();
-
-    if let Some(sdk) = sdk_dir {
-        let candidate = PathBuf::from(&sdk).join("emulator").join("emulator");
-        if candidate.exists() {
-            return candidate.to_string_lossy().into_owned();
-        }
-    }
-
-    // 2. Fall back to bare name (hope it's in PATH)
-    "emulator".to_string()
-}
-
 pub struct AdbClient {
     adb_path: String,
     emulator_path: String,
@@ -31,7 +14,7 @@ pub struct AdbClient {
 
 impl AdbClient {
     pub fn new() -> Result<Self> {
-        let adb_path = std::env::var("ADB").unwrap_or_else(|_| "adb".to_string());
+        let adb_path = std::env::var("DB").unwrap_or_else(|_| "db".to_string());
         let emulator_path = resolve_emulator_path();
 
         let output = Command::new(&adb_path)
@@ -193,4 +176,21 @@ impl AdbClient {
 
         Ok(())
     }
+}
+
+fn resolve_emulator_path() -> String {
+    // 1. Try ANDROID_HOME or ANDROID_SDK_ROOT
+    let sdk_dir = std::env::var("ANDROID_HOME")
+        .or_else(|_| std::env::var("ANDROID_SDK_ROOT"))
+        .ok();
+
+    if let Some(sdk) = sdk_dir {
+        let candidate = PathBuf::from(&sdk).join("emulator").join("emulator");
+        if candidate.exists() {
+            return candidate.to_string_lossy().into_owned();
+        }
+    }
+
+    // 2. Fall back to bare name (hope it's in PATH)
+    "emulator".to_string()
 }

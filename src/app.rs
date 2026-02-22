@@ -38,8 +38,8 @@ pub struct App {
 
     modal: Option<Modal>,
 
-    action_tx: mpsc::UnboundedSender<Msg>,
-    action_rx: mpsc::UnboundedReceiver<Msg>,
+    msg_tx: mpsc::UnboundedSender<Msg>,
+    msg_rx: mpsc::UnboundedReceiver<Msg>,
 }
 
 enum GlobalAction {
@@ -70,8 +70,9 @@ impl App {
         let devices = adb.devices().unwrap_or_default();
 
         let device_keymap = config.keybindings.section_keymap("DeviceList");
+        let devices_pane = DevicesPane::new(devices, device_keymap);
 
-        let (action_tx, action_rx) = mpsc::unbounded_channel();
+        let (msg_tx, msg_rx) = mpsc::unbounded_channel();
 
         Ok(Self {
             running: true,
@@ -81,13 +82,13 @@ impl App {
             adb: adb,
             last_refresh: Instant::now(),
 
-            devices: DevicesPane::new(devices, device_keymap),
+            devices: devices_pane,
             content: ContentPane::new(),
 
             modal: None,
 
-            action_tx: action_tx,
-            action_rx: action_rx,
+            msg_tx,
+            msg_rx,
         })
     }
 
@@ -115,7 +116,7 @@ impl App {
         };
         match event {
             Event::Init => {}
-            Event::Tick => self.action_tx.send(Msg::Tick)?,
+            Event::Tick => self.msg_tx.send(Msg::Tick)?,
             Event::Resize(w, h) => self.handle_resize(tui, w, h)?,
             Event::Render => self.render(tui)?,
             Event::Key(key) => self.handle_key(key),
@@ -222,7 +223,7 @@ impl App {
     }
 
     fn handle_actions(&mut self) -> Result<()> {
-        while let Ok(action) = self.action_rx.try_recv() {
+        while let Ok(action) = self.msg_rx.try_recv() {
             if !matches!(action, Msg::Tick) {
                 debug!("Handling action: {action:?}");
             }
@@ -281,7 +282,7 @@ impl App {
                 }
                 Command::RefreshDevices => {
                     if let Ok(devices) = self.adb.devices() {
-                        self.action_tx.send(Msg::DevicesUpdated(devices))?;
+                        self.msg_tx.send(Msg::DevicesUpdated(devices))?;
                         self.last_refresh = Instant::now();
                     }
                 }

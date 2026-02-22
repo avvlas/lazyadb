@@ -114,7 +114,6 @@ impl Component for DevicesPane {
                     self.selected_index = 0;
                 }
             }
-            _ => {}
         }
         Vec::new()
     }
