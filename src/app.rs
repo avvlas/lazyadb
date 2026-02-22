@@ -269,7 +269,7 @@ impl App {
                     let _ = self.adb.kill_emulator(&serial);
                 }
                 Command::OpenEmulatorsModal => {
-                    let emulators = self.adb.avds_with_status(&self.devices.items);
+                    let emulators = self.adb.avds_with_status(self.devices.devices());
                     let keymap = self.config.keybindings.section_keymap("EmulatorsModal");
                     self.modal = Some(Modal::Emulators(EmulatorsModal::new(emulators, keymap)))
                 }
@@ -287,7 +287,7 @@ impl App {
                     }
                 }
                 Command::RefreshDeviceInfo(serial) => {
-                    if let Some(device) = self.devices.items.iter().find(|d| d.serial == serial) {
+                    if let Some(device) = self.devices.devices().iter().find(|d| d.serial == serial) {
                         if let Ok(info) = self.adb.fetch_device_info(device) {
                             self.msg_tx.send(Msg::DeviceInfoUpdated(info))?;
                         }
